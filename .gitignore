@@ -1,0 +1,28 @@
+# --- PC host (OrbitNX/, C#) ---
+OrbitNX/bin/
+OrbitNX/obj/
+OrbitNX/publish/
+OrbitNX/Setup/*.exe
+*.user
+
+# --- Switch client (OrbitNX Client/OrbitNX/, C) ---
+*.elf
+*.nro
+*.pfs0
+*.nacp
+*.nso
+OrbitNX Client/OrbitNX/build/
+OrbitNX Client/OrbitNX/OrbitNX.zip
+OrbitNX Client/OrbitNX/switch-ip.txt
+
+# Legacy Electron host, superseded - not carried into this repo's history
+OrbitNX Client/SkyNX-Streamer/
+
+# Console-unique cryptographic keys - never commit, never share
+prod.keys
+title.keys
+**/prod.keys
+**/title.keys
+
+.DS_Store
+*node_modules
