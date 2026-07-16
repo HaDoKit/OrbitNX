@@ -7,7 +7,7 @@
 
 $ErrorActionPreference = "Stop"
 
-$DefaultIp = "192.168.1.111"
+$DefaultIp = "192.168.10.154"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $ipFile = Join-Path $projectRoot "switch-ip.txt"
 

@@ -28,6 +28,41 @@
                 "-File", "${workspaceFolder}/OrbitNX/scripts/build-installer.ps1"
             ],
             "problemMatcher": []
+        },
+        {
+            "label": "switch: build",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File", "${workspaceFolder}/OrbitNX Client/OrbitNX/scripts/build.ps1"
+            ],
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "switch: deploy",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File", "${workspaceFolder}/OrbitNX Client/OrbitNX/scripts/deploy.ps1"
+            ],
+            "problemMatcher": [],
+            "dependsOn": "switch: build"
+        },
+        {
+            "label": "switch: build+deploy",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-Command",
+                "& '${workspaceFolder}/OrbitNX Client/OrbitNX/scripts/build.ps1'; if ($LASTEXITCODE -eq 0) { & '${workspaceFolder}/OrbitNX Client/OrbitNX/scripts/deploy.ps1' }"
+            ],
+            "problemMatcher": []
         }
     ]
 }

@@ -17,7 +17,12 @@ static const SocketInitConfig socketInitConf = {
     .tcp_rx_buf_max_size = 0x400000,
 
     .udp_tx_buf_size = 0x1400,
-    .udp_rx_buf_size = 0x3500,
+    // Opus/RTP audio arrives continuously at ~16KB/s (128kbps) - the previous 0x3500 (13.5KB) gave
+    // under a second of headroom before overflowing, which is exactly what was happening: a fatal
+    // avio_read_partial I/O error ~0.8s into every session, from this buffer filling up faster than
+    // the audio thread could drain it. 0x20000 gives ~8s of slack at that rate, well above any
+    // realistic scheduling jitter.
+    .udp_rx_buf_size = 0x20000,
 
     .sb_efficiency = 2,
 

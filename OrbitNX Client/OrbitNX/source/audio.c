@@ -134,15 +134,19 @@ static int run_audio_session(u32 buffer_size)
         goto done;
     }
 
-    // 120ms timeout - enough headroom that a genuine burst of jitter doesn't trip the watchdog on
-    // its own, short enough that avio_read_partial still returns regularly enough for the watchdog
-    // check below to actually run on schedule during a real lull.
+    // No "timeout" option here (unlike the original version of this code): live nxlink debugging
+    // showed it made avio_read_partial return a hard AVERROR(EIO) on literally every call, forever,
+    // even while the host was actively sending real data - not the "nothing arrived within the
+    // window" EAGAIN/ETIMEDOUT this option is documented to produce. Whatever this platform's udp.c
+    // does internally to implement that timeout (likely poll()/select() under the hood) doesn't work
+    // right against libnx's bsd service. Without it, avio_read_partial just blocks until a real
+    // recvfrom() returns - fine here since the host genuinely is sending; the watchdog below still
+    // catches a session that's truly never going to receive anything.
     // Deliberately no fifo_size option here (unlike video.c's URL): setting it switches ffmpeg's
     // udp.c protocol into its threaded circular-buffer mode, which on this platform corrupts RTP
     // headers on a large fraction of reads. This uses the simple synchronous
     // one-recvfrom()-per-read path instead.
     AVDictionary *opts = NULL;
-    av_dict_set(&opts, "timeout", "120000", 0);
 
     char url[64];
     snprintf(url, sizeof(url), "udp://0.0.0.0:%d", AUDIO_PORT);
@@ -213,11 +217,24 @@ static int run_audio_session(u32 buffer_size)
         }
         else if (n < 0)
         {
-            char errbuf[64];
-            av_strerror(n, errbuf, sizeof(errbuf));
-            orbitnx_log("audio", "avio_read_partial fatal error: %s", errbuf);
-            fatal_error = true;
-            break;
+            // Root cause of a prior "audio dies ~0.8s in, forever" bug was the "timeout" AVOption
+            // above (now removed) making avio_read_partial return AVERROR(EIO) on every call under
+            // this platform's bsd service instead of the documented EAGAIN/ETIMEDOUT - so this branch
+            // shouldn't fire in normal operation anymore. Kept non-fatal (no close/reopen) regardless:
+            // avio_closep() on an avio_ctx that just hit that EIO was confirmed to hang forever, so
+            // retrying reads on the same still-open avio_ctx is cheap insurance against hitting that
+            // hang again for any other reason, known or not.
+            static u64 s_last_logged_tick = 0;
+            u64 now_tick_err = armGetSystemTick();
+            if (armTicksToNs(now_tick_err - s_last_logged_tick) >= 1000000000ULL) // 1s, rate-limited
+            {
+                char errbuf[64];
+                av_strerror(n, errbuf, sizeof(errbuf));
+                orbitnx_log("audio", "avio_read_partial non-fatal error (retrying): %s (code=%d), ever_played=%d",
+                           errbuf, n, ever_played_a_packet);
+                s_last_logged_tick = now_tick_err;
+            }
+            svcSleepThread(20000000ULL); // 20ms backoff - avoid hot-looping if this does recur
         }
         else if (n > 0)
         {
