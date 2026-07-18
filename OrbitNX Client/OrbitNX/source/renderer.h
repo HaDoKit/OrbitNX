@@ -36,4 +36,11 @@ bool isVideoActive(RenderContext *context);
 /* Sets the video-playing status */
 void setVideoActive(RenderContext *context, bool active);
 
+/* Drawing primitives also used by menu.c's app-selection screen, so it matches drawSplash's look
+ * instead of inventing its own. */
+void SDL_ClearScreen(RenderContext *context, SDL_Color colour);
+void SDL_DrawText(RenderContext *context, int x, int y, SDL_Color colour, const char *text);
+void draw_rect(RenderContext *context, int x, int y, int w, int h, SDL_Color colour);
+void drawGradient(RenderContext *context, int x, int y, int w, int h, SDL_Color colourStart, SDL_Color colourEnd, int direction);
+
 #endif

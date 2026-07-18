@@ -1,5 +1,6 @@
 using OrbitNX.Input;
 using OrbitNX.Settings;
+using OrbitNX.ShadPs4;
 
 namespace OrbitNX;
 
@@ -29,6 +30,7 @@ public sealed class MainForm : Form
     private readonly ComboBox _audioChannelsCombo = new();
     private readonly TrackBar _audioGainSlider = new();
     private readonly Label _audioGainValueLabel = new();
+    private readonly TextBox _shadPs4PathBox = new();
 
     public MainForm(Config config, AppOrchestrator orchestrator, NotifyIcon trayIcon)
     {
@@ -58,13 +60,15 @@ public sealed class MainForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         root.Controls.Add(BuildConnectionGroup(), 0, 0);
         root.Controls.Add(BuildControlGroup(), 0, 1);
         root.Controls.Add(BuildVideoGroup(), 0, 2);
         root.Controls.Add(BuildAudioGroup(), 0, 3);
         root.Controls.Add(BuildGamepadGroup(), 0, 4);
-        root.Controls.Add(BuildDriversGroup(), 0, 5);
+        root.Controls.Add(BuildShadPs4Group(), 0, 5);
+        root.Controls.Add(BuildDriversGroup(), 0, 6);
 
         Controls.Add(root);
 
@@ -75,6 +79,7 @@ public sealed class MainForm : Form
         ClientSize = new Size(preferredContentSize.Width + Padding.Horizontal, preferredContentSize.Height + Padding.Vertical);
 
         _orchestrator.ConnectionChanged += () => BeginInvoke(RefreshStatus);
+        _orchestrator.ShadPs4NotConfigured += () => BeginInvoke(PromptShadPs4NotConfigured);
         RefreshStatus();
 
         FormClosing += (_, e) =>
@@ -354,6 +359,83 @@ public sealed class MainForm : Form
         return group;
     }
 
+    /// <summary>
+    /// shadPS4 (https://shadps4.net) is a portable, installer-less PS4 emulator - unlike Steam it
+    /// writes no registry entries at all, so there's no *reliable* auto-detect the way
+    /// SteamLauncher reads Steam's install path from the registry. As a best-effort convenience,
+    /// <see cref="ShadPs4Launcher.TryAutoDetect"/> scans the common places a user would have
+    /// extracted the portable zip to (see its own doc comment) - if that finds nothing, the user
+    /// must point this at their own exe manually. Which of Big Picture/shadPS4 actually gets
+    /// launched on any given connect is chosen on the Switch side (see AppOrchestrator) - this
+    /// group only configures where shadPS4 lives on this PC.
+    /// </summary>
+    private GroupBox BuildShadPs4Group()
+    {
+        var group = NewGroup("shadPS4", 100);
+        var grid = NewSettingsGrid(2);
+
+        if (string.IsNullOrEmpty(_config.ShadPs4ExePath))
+        {
+            var detected = ShadPs4Launcher.TryAutoDetect();
+            if (detected is not null)
+            {
+                Logger.Log("MainForm", $"shadPS4 auto-detected at {detected}");
+                _config.ShadPs4ExePath = detected;
+                _config.Save();
+            }
+        }
+
+        var pathLabel = NewFieldLabel("Путь к shadPS4.exe:");
+        _shadPs4PathBox.ReadOnly = true;
+        _shadPs4PathBox.Width = 220;
+        _shadPs4PathBox.Anchor = AnchorStyles.Left;
+        _shadPs4PathBox.Margin = new Padding(0, 4, 8, 4);
+        _shadPs4PathBox.Text = _config.ShadPs4ExePath;
+
+        var browseButton = new Button { Text = "Обзор…", Width = 90, Anchor = AnchorStyles.Left, Margin = new Padding(0, 2, 0, 2) };
+        browseButton.Click += (_, _) => BrowseForShadPs4Exe();
+
+        var pathPanel = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = new Padding(0) };
+        pathPanel.Controls.Add(_shadPs4PathBox);
+        pathPanel.Controls.Add(browseButton);
+
+        var downloadLink = new LinkLabel { Text = "Скачать shadPS4", AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
+        downloadLink.LinkClicked += (_, _) => ShadPs4Launcher.OpenDownloadPage();
+
+        grid.Controls.Add(pathLabel, 0, 0);
+        grid.Controls.Add(pathPanel, 1, 0);
+        grid.SetColumnSpan(downloadLink, 2);
+        grid.Controls.Add(downloadLink, 0, 1);
+
+        group.Controls.Add(grid);
+        return group;
+    }
+
+    private void BrowseForShadPs4Exe()
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Filter = "shadPS4.exe|shadPS4.exe|Исполняемые файлы (*.exe)|*.exe",
+            Title = "Укажите shadPS4.exe",
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+
+        _config.ShadPs4ExePath = dialog.FileName;
+        _config.Save();
+        _shadPs4PathBox.Text = dialog.FileName;
+    }
+
+    private void PromptShadPs4NotConfigured()
+    {
+        var result = MessageBox.Show(
+            this,
+            "shadPS4 не настроен или не найден по указанному пути. Открыть страницу загрузки?",
+            "OrbitNX",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
+        if (result == DialogResult.Yes) ShadPs4Launcher.OpenDownloadPage();
+    }
+
     // Audio no longer has a driver to reinstall - see AudioCaptureSender (WASAPI loopback, built
     // into Windows, no third-party driver involved anymore).
     private GroupBox BuildDriversGroup()
@@ -429,7 +511,15 @@ public sealed class MainForm : Form
         {
             _toggleButton.Text = "■  Выключить трансляцию";
             _toggleButton.BackColor = AccentRed;
-            _statusLabel.Text = "Статус: клиент подключён, идёт трансляция";
+            var targetName = _orchestrator.ActiveTarget switch
+            {
+                AppTarget.BigPicture => "Big Picture (Steam)",
+                AppTarget.ShadPs4 => "shadPS4",
+                _ => null,
+            };
+            _statusLabel.Text = targetName is null
+                ? "Статус: клиент подключён, идёт трансляция"
+                : $"Статус: клиент подключён, идёт трансляция — {targetName}";
         }
         else
         {

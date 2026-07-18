@@ -58,6 +58,11 @@ public sealed class Config
     [JsonIgnore]
     public bool AudioDebugRecordToFile { get; set; }
 
+    /// <summary>Absolute path to shadPS4's portable exe. shadPS4 has no installer and no registry
+    /// entries (see ShadPs4Launcher) - unlike Steam there's no auto-detect, must be set manually via
+    /// MainForm's browse button. Empty means "not configured."</summary>
+    public string ShadPs4ExePath { get; set; } = "";
+
     private static string ConfigPath =>
         Path.Combine(AppContext.BaseDirectory, "config.json");
 

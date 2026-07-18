@@ -6,6 +6,7 @@ using OrbitNX.Capture;
 using OrbitNX.Input;
 using OrbitNX.Native;
 using OrbitNX.Session;
+using OrbitNX.ShadPs4;
 
 namespace OrbitNX;
 
@@ -24,13 +25,14 @@ public sealed class AppOrchestrator : IDisposable
     private readonly Config _config;
     private readonly SessionController _session;
     private readonly SteamLauncher _launcher = new();
+    private readonly ShadPs4Launcher _shadLauncher = new();
     private readonly VirtualGamepadHub _gamepads = new();
     private readonly TouchInjector _touch = new();
     private readonly GameActiveSignal _gameActiveSignal = new();
 
     private VideoEncoder? _videoEncoder;
     private AudioCaptureSender? _audioEncoder;
-    private bool _bigPictureLaunched;
+    private AppTarget? _activeTarget;
     private bool _pipelineActive;
     private System.Threading.Timer? _contentWindowWatcher;
 
@@ -65,6 +67,18 @@ public sealed class AppOrchestrator : IDisposable
     /// changes - subscribers touching WinForms controls must marshal back via Invoke/BeginInvoke.</summary>
     public event Action? ConnectionChanged;
 
+    /// <summary>Which app is currently launched/focused (null if neither has been launched yet
+    /// this run) - lets MainForm show the user which mode is actually active. Set right before
+    /// <see cref="ConnectionChanged"/> fires in OnSessionStarted, so it's always current by the
+    /// time subscribers read it from that event.</summary>
+    public AppTarget? ActiveTarget => _activeTarget;
+
+    /// <summary>Fired on the thread pool when the Switch asked for shadPS4 but
+    /// <see cref="Config.ShadPs4ExePath"/> is empty or points at a missing file - MainForm
+    /// subscribes to prompt the user to configure it (and optionally open the download page),
+    /// since AppOrchestrator itself has no UI to show one.</summary>
+    public event Action? ShadPs4NotConfigured;
+
     /// <summary>Takes effect on the very next gamepad packet, no reconnect needed.</summary>
     public bool SwapAbxy
     {
@@ -94,29 +108,58 @@ public sealed class AppOrchestrator : IDisposable
     }
 
     [SupportedOSPlatform("windows8.0")]
-    private async void OnSessionStarted()
+    private async void OnSessionStarted(HidPacket firstPacket)
     {
         Logger.Log("AppOrchestrator", "OnSessionStarted: entered, waiting for pipeline gate");
         await _pipelineGate.WaitAsync();
         Logger.Log("AppOrchestrator", "OnSessionStarted: gate acquired");
         try
         {
-            if (!_bigPictureLaunched)
+            var target = firstPacket.AppTarget;
+            IntPtr hwnd;
+
+            if (target == AppTarget.BigPicture)
             {
-                Logger.Log("AppOrchestrator", "OnSessionStarted: launching Steam");
-                await _launcher.LaunchSteamAsync(CancellationToken.None);
-                _bigPictureLaunched = true;
-                Logger.Log("AppOrchestrator", "OnSessionStarted: LaunchSteamAsync returned");
+                if (_activeTarget != AppTarget.BigPicture)
+                {
+                    Logger.Log("AppOrchestrator", "OnSessionStarted: launching Steam");
+                    await _launcher.LaunchSteamAsync(CancellationToken.None);
+                    Logger.Log("AppOrchestrator", "OnSessionStarted: LaunchSteamAsync returned");
+                }
+                else
+                {
+                    // Steam's still running from a previous session but Big Picture was exited on
+                    // disconnect (see OnSessionStopped) - just re-open it instead of a full relaunch.
+                    _launcher.OpenBigPicture();
+                }
+                _activeTarget = AppTarget.BigPicture;
+
+                Logger.Log("AppOrchestrator", "OnSessionStarted: waiting for Big Picture window");
+                hwnd = await _launcher.WaitForWindowAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
             }
             else
             {
-                // Steam's still running from a previous session but Big Picture was exited on
-                // disconnect (see OnSessionStopped) - just re-open it instead of a full relaunch.
-                _launcher.OpenBigPicture();
+                if (_activeTarget != AppTarget.ShadPs4)
+                {
+                    Logger.Log("AppOrchestrator", "OnSessionStarted: launching shadPS4");
+                    var launched = await _shadLauncher.LaunchOrFocusAsync(_config.ShadPs4ExePath, CancellationToken.None);
+                    if (!launched)
+                    {
+                        Logger.Log("AppOrchestrator", "OnSessionStarted: shadPS4 not configured/found");
+                        ShadPs4NotConfigured?.Invoke();
+                        return;
+                    }
+                }
+                else
+                {
+                    _shadLauncher.Focus(_config.ShadPs4ExePath);
+                }
+                _activeTarget = AppTarget.ShadPs4;
+
+                Logger.Log("AppOrchestrator", "OnSessionStarted: waiting for shadPS4 window");
+                hwnd = await _shadLauncher.WaitForWindowAsync(_config.ShadPs4ExePath, TimeSpan.FromSeconds(30), CancellationToken.None);
             }
 
-            Logger.Log("AppOrchestrator", "OnSessionStarted: waiting for Big Picture window");
-            var hwnd = await _launcher.WaitForWindowAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
             Logger.Log("AppOrchestrator", $"OnSessionStarted: WaitForWindowAsync returned hwnd={hwnd}");
 
             if (hwnd == IntPtr.Zero) return; // window never appeared; nothing to capture
@@ -159,8 +202,17 @@ public sealed class AppOrchestrator : IDisposable
 
             _pipelineActive = true;
             ConnectionChanged?.Invoke();
-            _contentWindowWatcher = new System.Threading.Timer(
-                _ => InjectFocusHookIntoNewContentWindows(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+
+            // This watcher's whole job is working around Steam Input's own focus/rebinding
+            // quirks (see the class doc comment and InjectFocusHookIntoNewContentWindows) - none
+            // of that is known to apply to shadPS4's plain single-window process, so it's only
+            // started for the Big Picture target. See the "biggest open risk" note in the plan:
+            // whether shadPS4 keeps taking gamepad input while unfocused is unverified.
+            if (target == AppTarget.BigPicture)
+            {
+                _contentWindowWatcher = new System.Threading.Timer(
+                    _ => InjectFocusHookIntoNewContentWindows(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+            }
         }
         catch (Exception ex)
         {
@@ -386,13 +438,19 @@ public sealed class AppOrchestrator : IDisposable
             _lastActiveWasGame = null;
             ConnectionChanged?.Invoke();
 
-            // Nothing is hidden anymore - Big Picture (or a game) sitting idle on the real screen
-            // once nobody is connected would be a visible nuisance to the first user. Steam itself
-            // stays running (see LaunchSteamAsync) so the next connect can jump straight back in.
-            if (_bigPictureLaunched)
+            // Nothing is hidden anymore - Big Picture/shadPS4 (or a game) sitting idle on the real
+            // screen once nobody is connected would be a visible nuisance to the first user. Steam
+            // itself stays running (see LaunchSteamAsync) so the next connect can jump straight
+            // back in - shadPS4 has no equivalent persistent background process, so its window is
+            // simply closed outright (see ShadPs4Launcher.Close).
+            if (_activeTarget == AppTarget.BigPicture)
             {
                 _launcher.CloseActiveGame();
                 _launcher.ExitBigPicture();
+            }
+            else if (_activeTarget == AppTarget.ShadPs4)
+            {
+                _shadLauncher.Close(_config.ShadPs4ExePath);
             }
         }
         finally

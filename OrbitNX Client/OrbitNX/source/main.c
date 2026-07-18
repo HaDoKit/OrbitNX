@@ -10,6 +10,7 @@
 #include "renderer.h"
 #include "audio.h"
 #include "logger.h"
+#include "menu.h"
 static const SocketInitConfig socketInitConf = {
     .tcp_tx_buf_size = 0x80000,
     .tcp_rx_buf_size = 0x100000,
@@ -86,14 +87,22 @@ void init()
     printf("startAudio\n");
     startAudio();
 
-    printf("startInput\n");
-    startInput();
-
     printf("makeRenderer\n");
     renderContext = makeRenderer();
+
+    // Blocks here until the user picks Big Picture or shadPS4 - must run after makeRenderer()
+    // (needs the render context/font) and before startInput() (so the choice is already set on
+    // g_selectedAppTarget before the very first JoyPkg is sent).
+    printf("runAppSelectMenu\n");
+    runAppSelectMenu(renderContext);
+
     printf("createVideoContext\n");
     videoContext = createVideoContext();
     videoContext->renderContext = renderContext;
+
+    printf("startInput\n");
+    startInput();
+
     printf("startRender\n");
     startRender(videoContext);
     printf("Complete INIT!\n");

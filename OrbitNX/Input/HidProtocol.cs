@@ -33,18 +33,31 @@ public readonly struct ControllerState
     private bool IsSet(int bit) => ((HeldKeys >> bit) & 1) != 0;
 }
 
+/// <summary>Which app the Switch client wants the PC host to launch/focus, chosen once via the
+/// on-screen menu (menu.c) before the input thread starts and sent unchanged on every JoyPkg for
+/// the rest of the process's life. Wire value carried in JoyPkg.appTarget (see network.h on the
+/// client). Declared as a ulong-backed enum to mirror the wire field's uint64_t type exactly - see
+/// network.h's comment on why that field is a uint64_t rather than uint32_t (alignment/padding).</summary>
+public enum AppTarget : ulong
+{
+    BigPicture = 0,
+    ShadPs4 = 1,
+}
+
 public sealed class HidPacket
 {
-    public const int PayloadSize = 128;
+    public const int PayloadSize = 136;
 
     public required ControllerState[] Controllers { get; init; }
     public required uint TouchX1 { get; init; }
     public required uint TouchY1 { get; init; }
     public required uint ControllerCount { get; init; }
+    public required AppTarget AppTarget { get; init; }
 
     /// <summary>
     /// Mirrors main.js parseInputStruct: 4x (HeldKeys u32, LJoyX i32, LJoyY i32, RJoyX i32, RJoyY i32),
-    /// touchX1,Y1,X2,Y2 (u32), accelX,Y,Z (f32), gyroX,Y,Z (f32), frameRate (u32), controllerCount (u32).
+    /// touchX1,Y1,X2,Y2 (u32), accelX,Y,Z (f32), gyroX,Y,Z (f32), frameRate (u32), controllerCount (u32),
+    /// appTarget (u64).
     /// </summary>
     public static HidPacket Parse(ReadOnlySpan<byte> payload)
     {
@@ -82,6 +95,14 @@ public sealed class HidPacket
 
         // FrameRate is on the wire but unused.
         var controllerCount = BinaryPrimitives.ReadUInt32LittleEndian(payload[(offset + 4)..]);
+        offset += 8;
+
+        var appTargetRaw = BinaryPrimitives.ReadUInt64LittleEndian(payload[offset..]);
+        // Defensive default: anything other than a known value (e.g. a mismatched/older client
+        // build) falls back to Big Picture rather than an undefined enum value propagating further.
+        var appTarget = appTargetRaw is (ulong)AppTarget.BigPicture or (ulong)AppTarget.ShadPs4
+            ? (AppTarget)appTargetRaw
+            : AppTarget.BigPicture;
 
         return new HidPacket
         {
@@ -89,6 +110,7 @@ public sealed class HidPacket
             TouchX1 = touchX1,
             TouchY1 = touchY1,
             ControllerCount = controllerCount,
+            AppTarget = appTarget,
         };
     }
 }

@@ -10,6 +10,7 @@ PadState pad;
 PadState pad2;
 PadState pad3;
 PadState pad4;
+AppTarget g_selectedAppTarget = APP_TARGET_BIG_PICTURE;
 HiddbgAbstractedPadHandle pads[4] = {0};
 HiddbgAbstractedPadState states[4] = {0};
 HidSixAxisSensorHandle handles[4];
@@ -139,6 +140,7 @@ void gamePadSend(JoyConSocket *connection)
     pkg.gyroY = (float_t)sixaxis.angle.y;
     pkg.gyroZ = (float_t)sixaxis.angle.z;
     pkg.renderFPS = (uint32_t)getFPS();
+    pkg.appTarget = (uint64_t)g_selectedAppTarget;
     sendJoyConInput(connection, &pkg);
 }
 

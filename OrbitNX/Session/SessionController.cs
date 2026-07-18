@@ -17,7 +17,7 @@ public sealed class SessionController : IAsyncDisposable
     private Task? _runTask;
     private TcpClient? _currentClient;
 
-    public event Action? SessionStarted;
+    public event Action<HidPacket>? SessionStarted;
     public event Action? SessionStopped;
     public event Action<HidPacket>? PacketReceived;
 
@@ -92,11 +92,11 @@ public sealed class SessionController : IAsyncDisposable
             var sessionStarted = false;
             try
             {
-                await ReadLoopAsync(client, ct, () =>
+                await ReadLoopAsync(client, ct, firstPacket =>
                 {
                     sessionStarted = true;
                     Logger.Log("SessionController", "first HID packet received - session started");
-                    SessionStarted?.Invoke();
+                    SessionStarted?.Invoke(firstPacket);
                 });
                 Logger.Log("SessionController", "HID stream ended (remote closed)");
             }
@@ -119,7 +119,7 @@ public sealed class SessionController : IAsyncDisposable
         }
     }
 
-    private async Task ReadLoopAsync(TcpClient client, CancellationToken ct, Action onFirstPacket)
+    private async Task ReadLoopAsync(TcpClient client, CancellationToken ct, Action<HidPacket> onFirstPacket)
     {
         var stream = client.GetStream();
         var buffer = new byte[4096];
@@ -135,7 +135,7 @@ public sealed class SessionController : IAsyncDisposable
                 if (!firedStart)
                 {
                     firedStart = true;
-                    onFirstPacket();
+                    onFirstPacket(packet);
                 }
                 PacketReceived?.Invoke(packet);
             }

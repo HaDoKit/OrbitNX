@@ -18,6 +18,15 @@
 // demuxer, so unlike video there's no SDP/URL string built from this constant elsewhere.
 #define AUDIO_PORT 2224
 
+// Keep in sync with the AppTarget enum in OrbitNX/Input/HidProtocol.cs (separate repo, no shared
+// build) - chosen once via the on-screen menu (menu.c) before the input thread starts, then sent
+// unchanged on every JoyPkg for the rest of the process's life.
+typedef enum
+{
+    APP_TARGET_BIG_PICTURE = 0,
+    APP_TARGET_SHADPS4 = 1,
+} AppTarget;
+
 /* Data to send to server */
 typedef struct
 {
@@ -54,6 +63,11 @@ typedef struct
     float_t gyroZ;
     uint32_t renderFPS;
     uint32_t controllerCount;
+    // uint64_t, not uint32_t: controllerCount ends on an already-8-byte-aligned offset, so a
+    // uint64_t here adds zero compiler padding before streamEnd. A uint32_t would force the AArch64
+    // ABI to silently pad to keep streamEnd aligned, leaving 4 bytes of garbage inside what the PC
+    // side (OrbitNX/Input/HidProtocol.cs) parses as payload.
+    uint64_t appTarget;
     uint64_t streamEnd;
 } JoyPkg;
 
