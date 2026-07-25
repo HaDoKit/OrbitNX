@@ -1,5 +1,7 @@
 #define MyAppName "OrbitNX"
-#define MyAppVersion "1.15.0"
+#ifndef MyAppVersion
+  #define MyAppVersion "1.15.0"
+#endif
 #define MyAppPublisher "OrbitNX"
 #define MyAppExeName "OrbitNX.exe"
 #define MyPublishDir "publish\win-x64"

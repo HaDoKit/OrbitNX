@@ -1,6 +1,14 @@
 # Non-interactive installer build: dotnet publish -> Inno Setup compile.
 # Produces Setup\OrbitNX-Setup.exe. Not part of the normal F5 dev loop
 # (see ../DEVELOPMENT.md) - this is release packaging only.
+#
+# -Version overrides installer.iss's #define MyAppVersion (used by the
+# release workflow to stamp the installer with the git tag instead of
+# whatever version happens to be checked in); omit it for a local build
+# and installer.iss's own default is used.
+param(
+    [string]$Version
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -34,7 +42,12 @@ else {
 }
 
 Write-Host "Compiling installer via $iscc..."
-& $iscc $installerIss
+if ($Version) {
+    & $iscc "/DMyAppVersion=$Version" $installerIss
+}
+else {
+    & $iscc $installerIss
+}
 if ($LASTEXITCODE -ne 0) {
     Write-Error "ISCC failed with exit code $LASTEXITCODE"
     exit $LASTEXITCODE
