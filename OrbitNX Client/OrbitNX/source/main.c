@@ -11,6 +11,8 @@
 #include "audio.h"
 #include "logger.h"
 #include "menu.h"
+// library.h is deliberately not included here anymore - see the comment in init() below where
+// runLibraryPickerScreen used to be called.
 static const SocketInitConfig socketInitConf = {
     .tcp_tx_buf_size = 0x80000,
     .tcp_rx_buf_size = 0x100000,
@@ -59,6 +61,18 @@ void startRender(VideoContext *videoContext)
 RenderContext *renderContext = NULL;
 VideoContext *videoContext = NULL;
 ClkrstSession cpuSession;
+
+// Own PadState for the splash screen's "B to go back" check (see main loop below) - separate from
+// input.c's pad/pad2..4 (those exist purely to forward remote input to the host, not to drive local
+// UI) and from menu.c's own menuPad, the same way menu.c already keeps its own rather than reaching
+// into input.c's globals.
+static PadState splashPad;
+
+// Owned here (not by menu.c/renderer.c) so the same instance survives the handoff from the
+// app-selection menu to the post-selection waiting screen (drawSplash) - otherwise the cosmos
+// background would reset/jump the moment a choice is confirmed.
+StarSystem starSystem;
+
 void init()
 {
     orbitnx_log_init();
@@ -90,11 +104,19 @@ void init()
     printf("makeRenderer\n");
     renderContext = makeRenderer();
 
+    starsystem_init(&starSystem, RESX / 2.0f, RESY / 2.0f);
+
     // Blocks here until the user picks Big Picture or shadPS4 - must run after makeRenderer()
     // (needs the render context/font) and before startInput() (so the choice is already set on
     // g_selectedAppTarget before the very first JoyPkg is sent).
     printf("runAppSelectMenu\n");
-    runAppSelectMenu(renderContext);
+    runAppSelectMenu(renderContext, &starSystem);
+
+    // The shadPS4 library-picker screen (library.c's runLibraryPickerScreen) that used to run here
+    // is deprecated/unwired - shadPS4 sessions now launch straight into shadPS4's own
+    // --big-picture mode (see OrbitNX/ShadPs4/ShadPs4Launcher.cs) instead of picking a specific
+    // title on the Switch beforehand. library.c/h and the LIBRARY_* protocol in network.h are left
+    // intact, not deleted, in case this is worth reviving.
 
     printf("createVideoContext\n");
     videoContext = createVideoContext();
@@ -105,6 +127,9 @@ void init()
 
     printf("startRender\n");
     startRender(videoContext);
+
+    padInitializeDefault(&splashPad);
+
     printf("Complete INIT!\n");
 }
 
@@ -152,7 +177,20 @@ int main(int argc, char **argv)
             }
             else
             {
-                drawSplash(renderContext);
+                // Lets the user back out to the Steam/shadPS4 choice while waiting for the PC to
+                // connect, instead of being stuck on this screen until a stream actually arrives
+                // (or the whole app is force-quit). Video/audio/input threads are left running -
+                // they just keep waiting for a connection in the background regardless of which
+                // menu screen is showing; only g_selectedAppTarget changes if the user picks again.
+                padUpdate(&splashPad);
+                if (padGetButtonsDown(&splashPad) & HidNpadButton_B)
+                {
+                    runAppSelectMenu(renderContext, &starSystem);
+                }
+                else
+                {
+                    drawSplash(renderContext, &starSystem);
+                }
             }
             svcSleepThread(14285714ULL); // Nano sleep to keep at 70fps to handle drop frames without stutter
         }

@@ -9,6 +9,12 @@ public sealed class Config
     public int VideoPort { get; set; } = 2222;
     public int HidPort { get; set; } = 2223;
     public int AudioPort { get; set; } = 2224;
+
+    /// <summary>shadPS4 game-library picker channel (separate TCP port from HidPort - that one is
+    /// fixed-size/fixed-rate/one-way, no room for a variable-length game list + icons). Next free
+    /// port after 2222/2223/2224. Keep numerically identical to LIBRARY_PORT in
+    /// OrbitNX Client/OrbitNX/source/network.h (separate repo, no shared build).</summary>
+    public int LibraryPort { get; set; } = 2225;
     public int TargetWidth { get; set; } = 1280;
     public int TargetHeight { get; set; } = 720;
     public int Fps { get; set; } = 60;

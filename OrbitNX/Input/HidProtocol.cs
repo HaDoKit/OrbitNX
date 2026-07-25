@@ -54,6 +54,20 @@ public sealed class HidPacket
     public required uint ControllerCount { get; init; }
     public required AppTarget AppTarget { get; init; }
 
+    /// <summary>Real angular velocity (rad/s, per the client's libnx HidSixAxisSensorState -
+    /// NOT an accumulated angle), from whichever single physical controller/handheld the client is
+    /// currently reading motion from - there is only one motion sensor's worth of data on the wire
+    /// regardless of ControllerCount, so this applies to controller index 0 only (see
+    /// VirtualGamepadHub's DualShock4 path, the only consumer of this today).</summary>
+    public required float GyroX { get; init; }
+    public required float GyroY { get; init; }
+    public required float GyroZ { get; init; }
+
+    /// <summary>Real acceleration (g), same single-sensor caveat as GyroX/Y/Z above.</summary>
+    public required float AccelX { get; init; }
+    public required float AccelY { get; init; }
+    public required float AccelZ { get; init; }
+
     /// <summary>
     /// Mirrors main.js parseInputStruct: 4x (HeldKeys u32, LJoyX i32, LJoyY i32, RJoyX i32, RJoyY i32),
     /// touchX1,Y1,X2,Y2 (u32), accelX,Y,Z (f32), gyroX,Y,Z (f32), frameRate (u32), controllerCount (u32),
@@ -89,8 +103,13 @@ public sealed class HidPacket
         // TouchX2/Y2 (bytes offset+8..offset+15) are on the wire but unused - see TouchInjector.
         offset += 16;
 
-        // AccelX/Y/Z, GyroX/Y/Z (24 bytes) are on the wire but unused - skip over them to keep
-        // FrameRate/ControllerCount at the correct offset.
+        // AccelX/Y/Z, GyroX/Y/Z (24 bytes, wire order matches JoyPkg in network.h exactly).
+        var accelX = BinaryPrimitives.ReadSingleLittleEndian(payload[offset..]);
+        var accelY = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 4)..]);
+        var accelZ = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 8)..]);
+        var gyroX = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 12)..]);
+        var gyroY = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 16)..]);
+        var gyroZ = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 20)..]);
         offset += 24;
 
         // FrameRate is on the wire but unused.
@@ -111,6 +130,12 @@ public sealed class HidPacket
             TouchY1 = touchY1,
             ControllerCount = controllerCount,
             AppTarget = appTarget,
+            AccelX = accelX,
+            AccelY = accelY,
+            AccelZ = accelZ,
+            GyroX = gyroX,
+            GyroY = gyroY,
+            GyroZ = gyroZ,
         };
     }
 }

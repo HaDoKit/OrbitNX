@@ -118,6 +118,25 @@ public sealed class AppOrchestrator : IDisposable
             var target = firstPacket.AppTarget;
             IntPtr hwnd;
 
+            // shadPS4 gets a virtual DualShock4 instead of Xbox360 - the only path that can carry
+            // real gyro/accelerometer data through to the game (see VirtualGamepadHub's class doc
+            // comment). Steam/Big Picture keeps Xbox360.
+            //
+            // History: (1) gamepad silently didn't respond in shadPS4 at all; (2) a standalone test
+            // creating a ViGEm DS4 and reading it back via Windows.Gaming.Input.RawGameController
+            // confirmed the raw report's button/axis/dpad encoding is correct at the Windows HID
+            // level, ruling out a bit-layout bug; (3) with DS4 mode re-enabled, live testing showed
+            // stutter/artifacts in the video feed, only in shadPS4 sessions, correlated with
+            // ffmpeg's video mux thread dying on WSAENOBUFS (-10055, UDP send buffer exhaustion) -
+            // i.e. the video breakage was a downstream symptom of system-wide contention, not
+            // shadPS4-specific rendering behavior. Leading suspect: shadPS4 sending DS4 output
+            // reports (rumble/lightbar color) that nothing was consuming, backing up the report
+            // queue - VirtualGamepadHub.PlugInDs4/DrainDs4OutputReports now actively drains it via
+            // AwaitRawOutputReport. If WSAENOBUFS/artifacts recur even with that fix, the next
+            // suspect is genuine network congestion unrelated to controller mode, not this report
+            // queue.
+            _gamepads.Mode = target == AppTarget.BigPicture ? ControllerMode.Xbox360 : ControllerMode.DualShock4;
+
             if (target == AppTarget.BigPicture)
             {
                 if (_activeTarget != AppTarget.BigPicture)
@@ -141,8 +160,15 @@ public sealed class AppOrchestrator : IDisposable
             {
                 if (_activeTarget != AppTarget.ShadPs4)
                 {
-                    Logger.Log("AppOrchestrator", "OnSessionStarted: launching shadPS4");
-                    var launched = await _shadLauncher.LaunchOrFocusAsync(_config.ShadPs4ExePath, CancellationToken.None);
+                    // Launches straight into shadPS4's own --big-picture mode (its native,
+                    // gamepad-navigable game list/UI) instead of a specific title picked via our own
+                    // Switch-side picker screen - see ShadPs4Launcher.LaunchOrFocusAsync's doc
+                    // comment. The titleId-driven direct-launch path (ShadPs4LibraryChannel/
+                    // LibraryProtocol/library.c on the Switch) is deprecated/unwired but left intact
+                    // in case it's worth reviving later - passing null here always takes the
+                    // --big-picture fallback branch.
+                    Logger.Log("AppOrchestrator", "OnSessionStarted: launching shadPS4 (--big-picture)");
+                    var launched = await _shadLauncher.LaunchOrFocusAsync(_config.ShadPs4ExePath, titleId: null, CancellationToken.None);
                     if (!launched)
                     {
                         Logger.Log("AppOrchestrator", "OnSessionStarted: shadPS4 not configured/found");
@@ -286,6 +312,63 @@ public sealed class AppOrchestrator : IDisposable
     }
 
     /// <summary>
+    /// Fully closes and reopens Big Picture after a game closes, instead of trying to coax Steam
+    /// Input into handing the controller binding back to Big Picture's own context on its own.
+    /// Confirmed live (via Steam's own C:\steam\logs\controller_ui.txt) that it doesn't: after a
+    /// non-Steam-game shortcut (e.g. "Luna Abyss") closes, Steam keeps reloading that game's own
+    /// controller config seconds after correctly switching to Big Picture's - neither a forced
+    /// gamepad replug (removed, confirmed live to make no difference) nor a synthetic Escape
+    /// keypress (SendBackNavigation, kept, also confirmed live not to fully fix it alone) stopped
+    /// this. A fresh Big Picture launch is the one thing already known to produce a working,
+    /// responsive Big Picture - every session's very first connect goes through exactly this path
+    /// (LaunchSteamAsync/OpenBigPicture + WaitForWindowAsync) - so this trades a visible reload
+    /// flicker for gamepad control that actually works, rather than a subtler in-place fix that
+    /// repeatedly hasn't. No artificial settle delay between close and reopen (see below) - the
+    /// flicker's actual duration hasn't been measured live yet, don't assume it's long.
+    ///
+    /// Runs as a background task (mirrors ScheduleDelayedAudioRestart) since the content-window
+    /// watcher tick that triggers this must not block on a multi-second close/reopen/wait sequence.
+    /// Deliberately does not hold _pipelineGate for the whole operation - only _launcher state is
+    /// touched, and OnSessionStopped's own ExitBigPicture/CloseActiveGame calls are idempotent-ish
+    /// enough (matches WaitForWindowAsync's own periodic re-fire-OpenBigPicture pattern) that a
+    /// benign race with a concurrent disconnect isn't worth serializing against.
+    /// </summary>
+    private void RestartBigPictureAfterGameClosed()
+    {
+        _restartingBigPicture = true;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                // No settle delay between ExitBigPicture and OpenBigPicture - that was an untested,
+                // conservative guess, not a confirmed requirement (WaitForWindowAsync's own re-fire
+                // pattern already tolerates OpenBigPicture landing before Steam's fully ready for
+                // it). Measure actual close-to-reopen timing live before adding any delay back.
+                _launcher.ExitBigPicture();
+
+                if (!_pipelineActive || _activeTarget != AppTarget.BigPicture) return;
+                _launcher.OpenBigPicture();
+
+                var hwnd = await _launcher.WaitForWindowAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
+                Logger.Log("AppOrchestrator", $"RestartBigPictureAfterGameClosed: reopened, hwnd={hwnd}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("AppOrchestrator", $"RestartBigPictureAfterGameClosed failed: {ex}");
+            }
+            finally
+            {
+                _restartingBigPicture = false;
+            }
+        });
+    }
+
+    // Set for the duration of RestartBigPictureAfterGameClosed - tells the null-content-window
+    // handling below that Big Picture's window disappearing right now is our own deliberate doing,
+    // not the first user closing it, so it must not count towards ForceDisconnect's tolerance.
+    private volatile bool _restartingBigPicture;
+
+    /// <summary>
     /// Launching a game from Big Picture opens a second, separate top-level window with its own
     /// "am I focused?" check - FocusHook must be injected into that process specifically, not just
     /// steam.exe/steamwebhelper.exe, or gamepad input stops the instant the first user's own real
@@ -336,34 +419,47 @@ public sealed class AppOrchestrator : IDisposable
 
             // After closing a game launched from Big Picture, gamepad control can stay completely
             // dead in Big Picture itself even though the focus hook keeps correctly targeting its
-            // window every tick - Steam Input's own per-context (game vs. Big Picture) controller
-            // binding handoff doesn't cleanly pick a ViGEm virtual controller back up on its own.
-            // FullReplug forces an actual elapsed gap with the controller genuinely absent, which a
-            // same-tick unplug+replug does not reliably trigger Steam to treat as a real
-            // device-gone-then-back event.
+            // window every tick. FullReplug (a forced ViGEm disconnect/reconnect cycle) used to run
+            // here as an attempted fix - removed after live testing via Steam's own
+            // controller_ui.txt proved it had no effect: Steam Input re-warmed and correctly
+            // switched the active binding back to Big Picture's own appid (769) with or without a
+            // replug, then independently reloaded the just-closed game's own config seconds later
+            // regardless. That reload is Steam's own behavior, not a device-presence/binding-handoff
+            // problem a replug could ever address - see SendBackNavigation's doc comment for the
+            // current best lead (the game's own Steam Input config having no navigation-compatible
+            // action set) and CloseActiveGame in SteamLauncher.cs's comment history for other things
+            // already ruled out.
             if (_lastActiveWasGame == true && isGame == false)
             {
-                Logger.Log("AppOrchestrator", "game closed, back in Big Picture - forcing a full gamepad replug");
-                _gamepads.FullReplug();
+                // SendBackNavigation (a real Escape keypress) backs Big Picture off the just-closed
+                // game's own detail/store page - confirmed live via Steam's own controller_ui.txt
+                // that while that page is showing, Steam Input loads THAT game's controller config
+                // instead of Big Picture's generic navigation config, which is a dead end for a
+                // non-Steam-game shortcut with no configured Steam Input layout. Also confirmed live
+                // NOT to fully fix the symptom by itself (Steam still reloads the game's config
+                // moments later regardless) - kept because it's cheap and not shown to hurt, not
+                // because it's a confirmed fix.
+                Logger.Log("AppOrchestrator", "game closed, back in Big Picture - backing off the game's own page and restarting Big Picture");
                 RestartAudioEncoder("game closed");
+                SteamLauncher.SendBackNavigation();
+                RestartBigPictureAfterGameClosed();
             }
 
             // A game briefly grabbing/reconfiguring the shared audio endpoint right as it starts can
             // leave audio crackling for the rest of the session if the capture restart lands in the
             // middle of that disturbance - delaying the automatic restart lets it settle first.
             //
-            // ForceForegroundWindow is needed here because FullReplug and GameActiveSignal's
-            // spoof-suppression alone are not enough: real OS foreground focus never actually moves
-            // to the game unless something calls SetForegroundWindow (see ReassertFocus's doc
-            // comment for why that's deliberately avoided as a per-tick call), and Steam Input's
-            // per-context controller binding keys off real focus regardless of what FocusHook tells
-            // Big Picture's own internal poll. Safe here specifically because it fires exactly
-            // once, at a confirmed transition, targeting the exact just-detected game hwnd.
+            // ForceForegroundWindow is needed here because GameActiveSignal's spoof-suppression
+            // alone is not enough: real OS foreground focus never actually moves to the game unless
+            // something calls SetForegroundWindow (see ReassertFocus's doc comment for why that's
+            // deliberately avoided as a per-tick call), and Steam Input's per-context controller
+            // binding keys off real focus regardless of what FocusHook tells Big Picture's own
+            // internal poll. Safe here specifically because it fires exactly once, at a confirmed
+            // transition, targeting the exact just-detected game hwnd.
             if (_lastActiveWasGame != true && isGame == true)
             {
-                Logger.Log("AppOrchestrator", "game launched - forcing real foreground focus, a full gamepad replug, and scheduling audio capture restart after a settle delay");
+                Logger.Log("AppOrchestrator", "game launched - forcing real foreground focus and scheduling audio capture restart after a settle delay");
                 SteamLauncher.ForceForegroundWindow(_launcher.LastActiveContentWindow);
-                _gamepads.FullReplug();
                 ScheduleDelayedAudioRestart("game launched");
             }
 
@@ -387,19 +483,30 @@ public sealed class AppOrchestrator : IDisposable
             // genuine close/crash (which stays null) shortly after.
             if (isGame is null)
             {
-                if (_consecutiveNullContentWindowTicks == 0)
+                if (_restartingBigPicture)
                 {
-                    // Capture this before _lastActiveWasGame gets overwritten to null below - by
-                    // the time the tick threshold is reached a few seconds from now,
-                    // _lastActiveWasGame would already read null regardless of what it was when
-                    // this streak of null ticks actually started.
-                    _contentWindowWasKnownBeforeNullStreak = _lastActiveWasGame is not null;
+                    // We're the ones who made Big Picture's window disappear right now (see
+                    // RestartBigPictureAfterGameClosed) - don't let the transient-launcher-window
+                    // tolerance below mistake our own deliberate close/reopen for the first user
+                    // having closed Big Picture themselves.
+                    _consecutiveNullContentWindowTicks = 0;
                 }
-                _consecutiveNullContentWindowTicks++;
-                if (_consecutiveNullContentWindowTicks == NullContentWindowTicksBeforeDisconnect && _contentWindowWasKnownBeforeNullStreak)
+                else
                 {
-                    Logger.Log("AppOrchestrator", "Big Picture window gone for several seconds - forcing client disconnect");
-                    _session.ForceDisconnect();
+                    if (_consecutiveNullContentWindowTicks == 0)
+                    {
+                        // Capture this before _lastActiveWasGame gets overwritten to null below - by
+                        // the time the tick threshold is reached a few seconds from now,
+                        // _lastActiveWasGame would already read null regardless of what it was when
+                        // this streak of null ticks actually started.
+                        _contentWindowWasKnownBeforeNullStreak = _lastActiveWasGame is not null;
+                    }
+                    _consecutiveNullContentWindowTicks++;
+                    if (_consecutiveNullContentWindowTicks == NullContentWindowTicksBeforeDisconnect && _contentWindowWasKnownBeforeNullStreak)
+                    {
+                        Logger.Log("AppOrchestrator", "Big Picture window gone for several seconds - forcing client disconnect");
+                        _session.ForceDisconnect();
+                    }
                 }
             }
             else
@@ -451,6 +558,14 @@ public sealed class AppOrchestrator : IDisposable
             else if (_activeTarget == AppTarget.ShadPs4)
             {
                 _shadLauncher.Close(_config.ShadPs4ExePath);
+                // Unlike Big Picture (Steam itself keeps running, so _activeTarget staying
+                // BigPicture correctly means "just OpenBigPicture(), don't relaunch Steam" on the
+                // next connect), shadPS4 has no persistent background process - it's now fully
+                // closed. Leaving _activeTarget at ShadPs4 here made the next OnSessionStarted take
+                // the "already active" branch and just Focus() a window that no longer exists,
+                // which silently does nothing and left WaitForWindowAsync timing out 30s later
+                // without ever actually relaunching shadPS4 - confirmed live via OrbitNX.log.
+                _activeTarget = null;
             }
         }
         finally
@@ -482,6 +597,7 @@ public sealed class AppOrchestrator : IDisposable
 
     public void Dispose()
     {
+        IsArmed = false;
         _session.DisposeAsync().AsTask().GetAwaiter().GetResult();
         OnSessionStopped();
         _gamepads.Dispose();

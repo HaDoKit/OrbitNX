@@ -136,9 +136,12 @@ void gamePadSend(JoyConSocket *connection)
     pkg.accelX = (float_t)sixaxis.acceleration.x;
     pkg.accelY = (float_t)sixaxis.acceleration.y;
     pkg.accelZ = (float_t)sixaxis.acceleration.z;
-    pkg.gyroX = (float_t)sixaxis.angle.x;
-    pkg.gyroY = (float_t)sixaxis.angle.y;
-    pkg.gyroZ = (float_t)sixaxis.angle.z;
+    // angular_velocity (real rotation rate) is the correct field for "gyro" - angle is an
+    // accumulated/derived orientation instead, which would report a constant nonzero value while
+    // held steady at any tilt (looking like continuous spin to anything consuming it downstream).
+    pkg.gyroX = (float_t)sixaxis.angular_velocity.x;
+    pkg.gyroY = (float_t)sixaxis.angular_velocity.y;
+    pkg.gyroZ = (float_t)sixaxis.angular_velocity.z;
     pkg.renderFPS = (uint32_t)getFPS();
     pkg.appTarget = (uint64_t)g_selectedAppTarget;
     sendJoyConInput(connection, &pkg);

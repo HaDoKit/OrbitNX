@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 
 namespace OrbitNX.ShadPs4;
 
@@ -13,14 +14,32 @@ namespace OrbitNX.ShadPs4;
 /// </summary>
 public sealed class ShadPs4Launcher
 {
+    // TitleIds are always short alphanumeric strings (e.g. "CUSA03173") - this is validated
+    // defense-in-depth given titleId ultimately arrives over the network (see
+    // ShadPs4LibraryChannel/LibraryProtocol), even though the wire format already caps its length.
+    // Anything failing this is treated as "no titleId" (falls back to the generic launch below)
+    // rather than ever reaching ProcessStartInfo.Arguments unvalidated.
+    private static readonly Regex TitleIdPattern = new(@"^[A-Za-z0-9]{1,16}$", RegexOptions.Compiled);
+
     /// <summary>
     /// Launches shadPS4 if it isn't already running, or brings its window to the front if it is.
     /// Returns false (without launching anything) if <paramref name="exePath"/> is empty or the
     /// file doesn't exist - shadPS4 has no registry/install-path auto-detect (it's a portable zip,
     /// see the class doc comment), so an unset/wrong path is an expected, user-fixable state rather
     /// than an error to throw on.
+    ///
+    /// <paramref name="titleId"/> is currently always passed as null by AppOrchestrator - the
+    /// generic launch below now uses shadPS4's own `--big-picture` mode (its native,
+    /// gamepad-navigable game list) instead of our own Switch-side picker screen, so the user picks
+    /// the game inside shadPS4 itself rather than on the Switch beforehand. The titleId-driven
+    /// direct-launch path (deprecated, not deleted - see ShadPs4LibraryChannel/LibraryProtocol/
+    /// library.c on the Switch, also deprecated/unwired) is kept intact below in case it's worth
+    /// reviving: when non-null, it launches straight into that specific game via CLI (confirmed
+    /// live: `shadPS4.exe CUSA03173` boots directly into the game, bypassing shadPS4's own GUI).
+    /// If shadPS4 is already running, a titleId can't be injected into the existing window - this
+    /// just refocuses it exactly like the title-less path always has.
     /// </summary>
-    public Task<bool> LaunchOrFocusAsync(string exePath, CancellationToken ct)
+    public Task<bool> LaunchOrFocusAsync(string exePath, string? titleId, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath))
         {
@@ -28,23 +47,104 @@ public sealed class ShadPs4Launcher
             return Task.FromResult(false);
         }
 
-        var processName = Path.GetFileNameWithoutExtension(exePath);
-        if (Process.GetProcessesByName(processName).Length > 0)
+        if (CandidateProcessNames(exePath).Any(name => Process.GetProcessesByName(name).Length > 0))
         {
             Focus(exePath);
             return Task.FromResult(true);
         }
 
-        // WorkingDirectory matters here specifically because shadPS4 is portable: it creates its
-        // "user" config folder next to the exe on first run, keyed off the process's working
-        // directory rather than any installed/registered location.
-        Process.Start(new ProcessStartInfo(exePath)
+        if (!string.IsNullOrEmpty(titleId))
         {
+            if (TitleIdPattern.IsMatch(titleId))
+            {
+                var directExe = ResolveRealShadPs4Exe(exePath);
+                if (directExe is not null)
+                {
+                    // shadPS4QtLauncher.exe (the Qt-based GUI wrapper, currently checked first by
+                    // KnownExeNames) has a known upstream bug where it doesn't forward CLI args to
+                    // the real emulator (shadps4-emu/shadPS4#3756) - direct-title launches must
+                    // target the real shadPS4.exe specifically, resolved as a sibling of whatever's
+                    // configured if that itself isn't already shadPS4.exe.
+                    //
+                    // --fullscreen true is passed explicitly rather than relying on config.toml's/
+                    // config.json's own Fullscreen setting - confirmed live that a bare CLI boot
+                    // doesn't honor it the way a normal GUI-driven launch does. This was suspected of
+                    // breaking the capture pipeline's gfxcapture (exclusive fullscreen vs. Windows
+                    // Graphics Capture) and reverted once, but the actual root cause of that live
+                    // video breakage turned out to be unrelated (a DualShock4 output-report queue
+                    // never being drained, fixed in VirtualGamepadHub.PlugInDs4/DrainDs4OutputReports)
+                    // - confirmed by the user that fullscreen itself wasn't the culprit.
+                    Process.Start(new ProcessStartInfo(directExe)
+                    {
+                        Arguments = $"{titleId} --fullscreen true",
+                        UseShellExecute = true,
+                        WorkingDirectory = Path.GetDirectoryName(directExe)!,
+                    });
+                    Logger.Log("ShadPs4Launcher", $"launched shadPS4 directly into title '{titleId}' ({directExe})");
+                    return Task.FromResult(true);
+                }
+
+                Logger.Log("ShadPs4Launcher", $"titleId '{titleId}' given but no sibling shadPS4.exe found next to '{exePath}' - falling back to generic launch");
+            }
+            else
+            {
+                Logger.Log("ShadPs4Launcher", $"titleId '{titleId}' failed validation - falling back to generic launch");
+            }
+        }
+
+        // --big-picture (confirmed live: shows a "shadPS4 Big Picture Mode" window - shadPS4's own
+        // gamepad-navigable game list) needs the real shadPS4.exe specifically, same reason as the
+        // titleId path above - the Qt launcher doesn't forward CLI args. Falls back to whatever
+        // exePath itself is (unchanged, no arguments) if no sibling shadPS4.exe can be found, rather
+        // than failing the whole launch over one missing flag.
+        //
+        // WorkingDirectory is set to the exe's own folder to match how a user normally
+        // double-clicks it directly - shadPS4 is a portable app (no installer), though contrary to
+        // what an earlier version of this comment assumed, its actual user config/state lives in
+        // %APPDATA%\shadPS4\config.toml or config.json (confirmed live), not in a folder created
+        // next to the exe.
+        var bigPictureDirectExe = ResolveRealShadPs4Exe(exePath);
+        var bigPictureExe = bigPictureDirectExe ?? exePath;
+        Process.Start(new ProcessStartInfo(bigPictureExe)
+        {
+            // Only pass the flag when we know bigPictureExe is genuinely shadPS4.exe (resolution
+            // succeeded) - if it failed and we fell back to launching exePath as-is, exePath might
+            // be the Qt launcher, which would silently ignore/mishandle this argument.
+            Arguments = bigPictureDirectExe is not null ? "--big-picture" : "",
             UseShellExecute = true,
-            WorkingDirectory = Path.GetDirectoryName(exePath)!,
+            WorkingDirectory = Path.GetDirectoryName(bigPictureExe)!,
         });
-        Logger.Log("ShadPs4Launcher", $"launched shadPS4 ({exePath})");
+        Logger.Log("ShadPs4Launcher", $"launched shadPS4 ({bigPictureExe}{(bigPictureDirectExe is not null ? " --big-picture" : "")})");
         return Task.FromResult(true);
+    }
+
+    /// <summary>Resolves the real shadPS4.exe to use for a direct-title CLI launch: exePath itself
+    /// if it's already shadPS4.exe, otherwise a sibling shadPS4.exe next to it (covers the common
+    /// case where the configured exePath is shadPS4QtLauncher.exe). Returns null if no such exe can
+    /// be found - the caller falls back to the generic launch rather than failing outright.</summary>
+    private static string? ResolveRealShadPs4Exe(string exePath)
+    {
+        if (string.Equals(Path.GetFileName(exePath), "shadPS4.exe", StringComparison.OrdinalIgnoreCase))
+            return exePath;
+
+        var directory = Path.GetDirectoryName(exePath);
+        if (directory is null) return null;
+
+        var candidate = Path.Combine(directory, "shadPS4.exe");
+        return File.Exists(candidate) ? candidate : null;
+    }
+
+    /// <summary>The configured exe's own process name, plus "shadPS4" - the real emulator's actual
+    /// process name, which can differ from the configured exePath whenever a titleId launch ran
+    /// (that path always launches shadPS4.exe directly regardless of what's configured - see
+    /// ResolveRealShadPs4Exe). Checking both means an already-running process is found/focused
+    /// correctly no matter which of the two ways it was most recently launched.</summary>
+    private static IEnumerable<string> CandidateProcessNames(string exePath)
+    {
+        var configuredName = Path.GetFileNameWithoutExtension(exePath);
+        yield return configuredName;
+        if (!string.Equals(configuredName, "shadPS4", StringComparison.OrdinalIgnoreCase))
+            yield return "shadPS4";
     }
 
     /// <summary>Brings shadPS4's window to the foreground if it's already running. No
@@ -183,10 +283,12 @@ public sealed class ShadPs4Launcher
 
     private static IntPtr FindMainWindow(string exePath)
     {
-        var processName = Path.GetFileNameWithoutExtension(exePath);
-        foreach (var process in Process.GetProcessesByName(processName))
+        foreach (var processName in CandidateProcessNames(exePath))
         {
-            if (process.MainWindowHandle != IntPtr.Zero) return process.MainWindowHandle;
+            foreach (var process in Process.GetProcessesByName(processName))
+            {
+                if (process.MainWindowHandle != IntPtr.Zero) return process.MainWindowHandle;
+            }
         }
         return IntPtr.Zero;
     }

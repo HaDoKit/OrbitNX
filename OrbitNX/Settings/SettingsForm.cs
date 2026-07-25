@@ -10,6 +10,7 @@ public sealed class SettingsForm : Form
     private readonly NumericUpDown _videoPort = new();
     private readonly NumericUpDown _hidPort = new();
     private readonly NumericUpDown _audioPort = new();
+    private readonly NumericUpDown _libraryPort = new();
 
     public Config Result { get; private set; }
 
@@ -22,7 +23,7 @@ public sealed class SettingsForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(320, 200);
+        ClientSize = new Size(320, 235);
 
         var ipLabel = new Label { Text = "IP устройства:", Location = new Point(12, 15), AutoSize = true };
         _ipBox.Location = new Point(140, 12);
@@ -47,13 +48,19 @@ public sealed class SettingsForm : Form
         _audioPort.Minimum = 1; _audioPort.Maximum = 65535;
         _audioPort.Value = current.AudioPort;
 
-        var saveButton = new Button { Text = "Сохранить", Location = new Point(140, 155), DialogResult = DialogResult.OK };
-        var cancelButton = new Button { Text = "Отмена", Location = new Point(225, 155), DialogResult = DialogResult.Cancel };
+        var libraryLabel = new Label { Text = "Порт библиотеки:", Location = new Point(12, 155), AutoSize = true };
+        _libraryPort.Location = new Point(140, 152);
+        _libraryPort.Width = 160;
+        _libraryPort.Minimum = 1; _libraryPort.Maximum = 65535;
+        _libraryPort.Value = current.LibraryPort;
+
+        var saveButton = new Button { Text = "Сохранить", Location = new Point(140, 190), DialogResult = DialogResult.OK };
+        var cancelButton = new Button { Text = "Отмена", Location = new Point(225, 190), DialogResult = DialogResult.Cancel };
 
         Controls.AddRange(new Control[]
         {
             ipLabel, _ipBox, videoLabel, _videoPort, hidLabel, _hidPort,
-            audioLabel, _audioPort, saveButton, cancelButton,
+            audioLabel, _audioPort, libraryLabel, _libraryPort, saveButton, cancelButton,
         });
 
         AcceptButton = saveButton;
@@ -68,6 +75,7 @@ public sealed class SettingsForm : Form
                 VideoPort = (int)_videoPort.Value,
                 HidPort = (int)_hidPort.Value,
                 AudioPort = (int)_audioPort.Value,
+                LibraryPort = (int)_libraryPort.Value,
                 TargetWidth = current.TargetWidth,
                 TargetHeight = current.TargetHeight,
                 Fps = current.Fps,

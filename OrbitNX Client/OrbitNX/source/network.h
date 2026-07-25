@@ -71,6 +71,69 @@ typedef struct
     uint64_t streamEnd;
 } JoyPkg;
 
+// shadPS4 game-library picker protocol - separate TCP channel from the JoyPkg/HID one above
+// (that one is fixed-size/fixed-rate/one-way, no room for variable-length titles+icons or a
+// request/response shape). Keep every constant below numerically identical to
+// OrbitNX/ShadPs4/LibraryProtocol.cs in the PC repo - no shared build, a mismatch fails at
+// runtime, not compile time (same class of risk as the JoyPkg/HidPacket discrepancy already on
+// record). Wire integers are read/written as raw native bytes (no explicit byte-swap) because
+// both ends are little-endian (Switch is AArch64, PC is x86/x64) - the same implicit assumption
+// JoyPkg itself already relies on.
+#define LIBRARY_PORT 2225
+#define LIBRARY_MAGIC0 'O'
+#define LIBRARY_MAGIC1 'N'
+#define LIBRARY_MAGIC2 'X'
+#define LIBRARY_MAGIC3 'L'
+#define LIBRARY_PROTOCOL_VERSION 1
+#define LIBRARY_MSG_LIST 1
+#define LIBRARY_MSG_SELECTION 2
+#define LIBRARY_SELECTION_STATUS_SELECTED 0
+#define LIBRARY_SELECTION_STATUS_CANCELLED 1
+#define LIBRARY_MAX_GAMES 64
+#define LIBRARY_TITLE_ID_WIRE_MAX 16
+#define LIBRARY_TITLE_WIRE_MAX 512
+#define LIBRARY_ICON_MAX_BYTES (4 * 1024 * 1024)
+#define LIBRARY_SELECTION_MSG_SIZE 24
+// In-memory buffer sizes (include the NUL terminator) - separate from the wire-max constants
+// above since a title longer than this is truncated on store but still fully consumed off the
+// socket (see library.c) so the stream stays aligned.
+#define LIBRARY_TITLE_ID_BUF_LEN 17
+#define LIBRARY_TITLE_BUF_LEN 128
+
+typedef struct
+{
+    int lissock;
+    int sock;
+} LibrarySocket;
+
+LibrarySocket *createLibrarySocket(void);
+
+/* Closes both fds (if open) and frees the struct - full teardown, unlike freeJoyConSocket which
+ * only ever frees the struct itself (JoyConSocket's fds live for the whole process). A fresh
+ * LibrarySocket is created per runLibraryPickerScreen() call, so this is always a full teardown. */
+void freeLibrarySocket(LibrarySocket *connection);
+
+/* Idempotent bind+listen (mirrors connectJoyConSocket's lissock-reuse check), then waits up to
+ * timeoutMs (via select(), not SO_RCVTIMEO on the listener - the latter is unproven for accept()
+ * timeouts and this is more portably well-defined) for an incoming connection.
+ * Returns 1 on a client accepted, 0 on timeout (caller should retry / check for cancel), -1 on a
+ * hard error (caller should give up). This is the cancellable-wait mechanism the existing
+ * connectJoyConSocket's own TODO (network.c) already flags as missing - applied only to this new,
+ * separate socket; the real HID socket's blocking accept() is intentionally left untouched. */
+int acceptLibraryConnection(LibrarySocket *connection, int timeoutMs);
+
+/* Reads exactly len bytes, looping over short reads, waiting up to timeoutMs (via select()) before
+ * each underlying recv(). Returns 1 on success, 0 on timeout, -1 on error/orderly close. */
+int recvLibraryExact(LibrarySocket *connection, void *buf, size_t len, int timeoutMs);
+
+/* Writes exactly len bytes, looping over short writes. Returns 1 on success, -1 on error. */
+int sendLibraryExact(LibrarySocket *connection, const void *buf, size_t len);
+
+/* Closes the accepted client socket only - the listener stays up. Not relied on today
+ * (runLibraryPickerScreen tears down the whole LibrarySocket after one exchange via
+ * freeLibrarySocket) but kept symmetric/reusable rather than baking in a one-shot assumption. */
+void closeLibraryClientConnection(LibrarySocket *connection);
+
 /* Init nx network and av network */
 void network_init(const SocketInitConfig *conf);
 
