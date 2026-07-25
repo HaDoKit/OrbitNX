@@ -1,0 +1,41 @@
+name: Build Host
+
+on:
+  push:
+    paths:
+      - "OrbitNX/**"
+      - ".github/workflows/build-host.yml"
+  pull_request:
+    paths:
+      - "OrbitNX/**"
+      - ".github/workflows/build-host.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-host-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: dotnet build (Release)
+        run: >
+          dotnet build OrbitNX/OrbitNX.csproj
+          /property:GenerateFullPaths=true
+          /property:Configuration=Release
+          /consoleloggerparameters:NoSummary
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: OrbitNX-host-${{ github.sha }}
+          path: OrbitNX/bin/Release/net8.0-windows8.0/
+          if-no-files-found: error
