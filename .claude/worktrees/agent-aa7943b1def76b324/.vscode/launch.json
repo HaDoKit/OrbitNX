@@ -1,0 +1,17 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        
+        {
+            "name": "OrbitNX (Release)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/OrbitNX/bin/Release/net8.0-windows8.0/OrbitNX.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}/OrbitNX/bin/Release/net8.0-windows8.0",
+            "stopAtEntry": false,
+            "console": "internalConsole"
+        }
+    ]
+}

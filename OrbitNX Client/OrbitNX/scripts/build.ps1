@@ -52,7 +52,15 @@ if ($needsSubst) {
 try {
     Push-Location $buildRoot
     try {
+        # make's own stderr (gcc diagnostics, even harmless warnings) must not be treated as a
+        # terminating error here - with the global $ErrorActionPreference = "Stop" above, any
+        # stderr line from `& make` throws a NativeCommandError before $LASTEXITCODE is ever
+        # checked below, making a successful build look like a failure. Only the explicit
+        # $LASTEXITCODE check below should decide success/failure for this call.
+        $previousEap = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
         & make
+        $ErrorActionPreference = $previousEap
         if ($LASTEXITCODE -ne 0) {
             Write-Error "make failed with exit code $LASTEXITCODE"
             exit $LASTEXITCODE

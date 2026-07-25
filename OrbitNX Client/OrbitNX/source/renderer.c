@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include "video.h"
 #include <time.h>
+#include <SDL2/SDL2_gfxPrimitives.h>
 float timeThen = 0;
 float timeNow = 1;
 float delta = 1;
@@ -36,114 +37,6 @@ void loopEnd()
     timeThen = timeNow;
 }
 
-int getRandomInt(int minimum_number, int max_number)
-{
-    return rand() % (max_number + 1 - minimum_number) + minimum_number;
-}
-typedef struct
-{
-    float x;
-    float y;
-    float r;
-    float vx;
-    float vy;
-    SDL_Color color;
-} bubble;
-typedef struct
-{
-    float vx;
-    float vy;
-} vector;
-vector globalForce = {0, -30};
-
-int bubblesLength = 0;
-int maxBubbles = 20;
-bubble bubbles[20];
-long getDistance(long ax, long ay, long bx, long by)
-{
-    long a = ax - bx;
-    long b = ay - by;
-    return sqrt(a * a + b * b);
-}
-bool detectCircleToCircleCollision(bubble b1, bubble b2)
-{ // check for collision between circles
-    long radii_sum = b1.r + b2.r;
-    long distance = getDistance(b1.x, b1.y, b2.x, b2.y); // If distance is less than radius added together a collision is occuring
-    if (distance < radii_sum)
-    {
-        return true;
-    }
-    return false;
-}
-bool testForCollision(bubble b, int bI)
-{
-    for (int i = 0; i < bubblesLength; i++)
-    {
-        if (i != bI)
-        {
-            if (detectCircleToCircleCollision(b, bubbles[i]))
-            {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-void initBubbles()
-{
-    while (bubblesLength < maxBubbles)
-    {
-        SDL_Color bubbleColor = {148, 0, 126, 255};
-        float randR = 15;
-        if (bubblesLength < 8)
-        {
-            SDL_Color nbc = {120, 0, 102, 120};
-            randR = getRandomInt(5, 20);
-            bubbleColor = nbc;
-        }
-        else if (bubblesLength < 13)
-        {
-            SDL_Color nbc = {89, 0, 76, 180};
-            randR = getRandomInt(25, 40);
-            bubbleColor = nbc;
-        }
-        else if (bubblesLength < 17)
-        {
-            SDL_Color nbc = {66, 0, 57, 200};
-            randR = getRandomInt(45, 60);
-            bubbleColor = nbc;
-        }
-        else if (bubblesLength < 20)
-        {
-            SDL_Color nbc = {46, 0, 40, 230};
-            randR = getRandomInt(65, 80);
-            bubbleColor = nbc;
-        }
-        float randXv = 0;
-        if (getRandomInt(0, 1) == 0)
-        {
-            randXv = getRandomInt(10, 25);
-        }
-        else
-        {
-            randXv = getRandomInt(10, 25) * -1;
-        }
-        float randYv = getRandomInt(20, 50) * -1;
-        bool collides = true;
-        while (collides)
-        {
-            int randX = getRandomInt(0, 1280);
-            int randY = getRandomInt(0, 720);
-            bubble nb = {randX, randY, randR, randXv, randYv, bubbleColor};
-            if (!testForCollision(nb, -1)) //-1 is because bubble has not yet spawned
-            {
-                bubblesLength++;
-                bubbles[bubblesLength] = nb;
-                collides = false;
-            }
-        };
-    }
-}
 RenderContext *makeRenderer()
 {
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER);
@@ -196,7 +89,6 @@ RenderContext *makeRenderer()
     context->font = FC_CreateFont();
     FC_LoadFont_RW(context->font, context->renderer, SDL_RWFromMem((void *)fontData.address, fontData.size), SDL_RWFromMem((void *)fontExtData.address, fontExtData.size), 1, 40, FC_MakeColor(0, 0, 0, 255), TTF_STYLE_NORMAL);
     initDelta();
-    initBubbles();
 
     return context;
 }
@@ -236,6 +128,13 @@ void setVideoActive(RenderContext *context, bool active)
 
 void SDL_ClearScreen(RenderContext *context, SDL_Color colour)
 {
+    // SDL2_gfx's *RGBA primitives (roundedRectangleRGBA/roundedBoxRGBA) set the renderer's blend
+    // mode themselves based on the alpha of whatever they last drew, forcing it to NONE for a
+    // fully-opaque (alpha 255) call - and that mode leaks into every draw call afterwards,
+    // including the next frame's, until something sets it back. Since every frame starts here,
+    // this is the one place that reliably restores it before anything else this frame relies on
+    // alpha blending (translucent bars, trails, ...).
+    SDL_SetRenderDrawBlendMode(context->renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(context->renderer, colour.r, colour.g, colour.b, colour.a);
     SDL_RenderClear(context->renderer);
 }
@@ -303,6 +202,16 @@ void fillCircle(RenderContext *context, float centreX, float centreY, float radi
         SDL_RenderDrawLine(context->renderer, centreX - dx, (centreY + 1) - dy + radius, centreX + dx, (centreY + 1) - dy + radius);
     }
 }
+void drawRoundedRect(RenderContext *context, int x, int y, int w, int h, int radius, SDL_Color colour)
+{
+    roundedRectangleRGBA(context->renderer, x, y, x + w, y + h, radius, colour.r, colour.g, colour.b, colour.a);
+}
+
+void fillRoundedRect(RenderContext *context, int x, int y, int w, int h, int radius, SDL_Color colour)
+{
+    roundedBoxRGBA(context->renderer, x, y, x + w, y + h, radius, colour.r, colour.g, colour.b, colour.a);
+}
+
 void drawGradient(RenderContext *context, int x, int y, int w, int h, SDL_Color colourStart, SDL_Color colourEnd, int direction)
 {
     int drawLines = 1;
@@ -347,80 +256,48 @@ void drawGradient(RenderContext *context, int x, int y, int w, int h, SDL_Color 
     }
 }
 
-void renderBubbles(RenderContext *context)
+void drawOrbitNxTopBar(RenderContext *context)
 {
-    for (int i = 0; i < bubblesLength; i++)
-    {
-        bubbles[i].vx += globalForce.vx * delta;
-        bubbles[i].vy += globalForce.vy * delta;
-        bubbles[i].x += bubbles[i].vx * delta;
-        bubbles[i].y += bubbles[i].vy * delta;
-        float negRadius = bubbles[i].r * -1;
-        if (bubbles[i].y < negRadius || bubbles[i].y > 720 + bubbles[i].r + 1) // bubble off top or overflowed to bottom because large delta
-        {
+    SDL_Color barColour = {150, 150, 150, 26}; // ~0.1 alpha
+    draw_rect(context, 0, 0, RESX, 70, barColour);
 
-            float randYv = getRandomInt(20, 50) * -1;
-            bubbles[i].vy = randYv;
-            bubbles[i].y = 720 + bubbles[i].r;
-            bool isColliding = true;
-            int attempts = 3;
-            while (isColliding && attempts > 3)
-            {
-                bubbles[i].x = getRandomInt(0, 1280);
-                if (!testForCollision(bubbles[i], i))
-                {
-                    isColliding = false;
-                }
-                attempts--;
-            }
+    SDL_Color white = {255, 255, 255, 255};
+    SDL_Color red = {230, 57, 70, 255};
+    SDL_Color blue = {58, 134, 255, 255};
 
-            float randXv = 0;
-            if (getRandomInt(0, 1) == 0)
-            {
-                randXv = getRandomInt(10, 25);
-            }
-            else
-            {
-                randXv = getRandomInt(10, 25) * -1;
-            }
-            bubbles[i].vx = randXv;
-        }
-        fillCircle(context, bubbles[i].x, bubbles[i].y, bubbles[i].r, bubbles[i].color);
-    }
+    int x = 24;
+    int y = 14;
+    SDL_DrawText(context, x, y, white, "Orbit");
+    x += FC_GetWidth(context->font, "%s", "Orbit");
+    SDL_DrawText(context, x, y, red, "N");
+    x += FC_GetWidth(context->font, "%s", "N");
+    SDL_DrawText(context, x, y, blue, "X");
 }
 
-void drawSplash(RenderContext *context)
+void drawIpAddressLine(RenderContext *context)
 {
-    loopStart();
-    SDL_Color bg = {50, 50, 50, 255};
-    SDL_ClearScreen(context, bg);
-
-    SDL_Color bgf = {95, 0, 135, 255};
-    SDL_Color bgt = {87, 1, 94, 255};
-    drawGradient(context, 0, 0, 1280, 720, bgf, bgt, 1);
-
-    renderBubbles(context);
-
-    SDL_Color gf = {0, 0, 0, 200};
-    SDL_Color gt = {0, 0, 0, 0};
-    drawGradient(context, 0, 0, 1280, 180, gf, gt, 1);
-    drawGradient(context, 0, 720 - 100, 1280, 180, gf, gt, 2);
-
-    int imgW = 256;
-    int imgH = 256;
-    SDL_Rect imgDest;
-    imgDest.x = (1280 / 2) - (imgW / 2);
-    imgDest.y = (720 / 2) - (imgH / 2);
-    imgDest.w = imgW;
-    imgDest.h = imgH;
-
-    SDL_Color white = {230, 230, 230, 255};
     u32 ip = gethostid();
-    char str_buf[300];
-    snprintf(str_buf, 300, "IP-Address: %u.%u.%u.%u\n",
+    char ipBuf[64];
+    snprintf(ipBuf, sizeof(ipBuf), "IP Address: %u.%u.%u.%u",
              ip & 0xFF, (ip >> 8) & 0xFF, (ip >> 16) & 0xFF, (ip >> 24) & 0xFF);
 
-    SDL_DrawText(context, 400, imgDest.y + imgH + 8, white, str_buf);
+    SDL_Color white = {255, 255, 255, 255};
+    int textWidth = FC_GetWidth(context->font, "%s", ipBuf);
+    SDL_DrawText(context, RESX / 2 - textWidth / 2, RESY - 46, white, ipBuf);
+}
+
+void drawSplash(RenderContext *context, StarSystem *starSystem)
+{
+    loopStart();
+
+    SDL_Color bg = {5, 5, 8, 255};
+    SDL_ClearScreen(context, bg);
+
+    starsystem_update(starSystem, delta);
+    starsystem_draw(context, starSystem);
+
+    drawOrbitNxTopBar(context);
+    drawIpAddressLine(context);
 
     SDL_RenderPresent(context->renderer);
     loopEnd();

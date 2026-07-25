@@ -33,18 +33,45 @@ public readonly struct ControllerState
     private bool IsSet(int bit) => ((HeldKeys >> bit) & 1) != 0;
 }
 
+/// <summary>Which app the Switch client wants the PC host to launch/focus, chosen once via the
+/// on-screen menu (menu.c) before the input thread starts and sent unchanged on every JoyPkg for
+/// the rest of the process's life. Wire value carried in JoyPkg.appTarget (see network.h on the
+/// client). Declared as a ulong-backed enum to mirror the wire field's uint64_t type exactly - see
+/// network.h's comment on why that field is a uint64_t rather than uint32_t (alignment/padding).</summary>
+public enum AppTarget : ulong
+{
+    BigPicture = 0,
+    ShadPs4 = 1,
+}
+
 public sealed class HidPacket
 {
-    public const int PayloadSize = 128;
+    public const int PayloadSize = 136;
 
     public required ControllerState[] Controllers { get; init; }
     public required uint TouchX1 { get; init; }
     public required uint TouchY1 { get; init; }
     public required uint ControllerCount { get; init; }
+    public required AppTarget AppTarget { get; init; }
+
+    /// <summary>Real angular velocity (rad/s, per the client's libnx HidSixAxisSensorState -
+    /// NOT an accumulated angle), from whichever single physical controller/handheld the client is
+    /// currently reading motion from - there is only one motion sensor's worth of data on the wire
+    /// regardless of ControllerCount, so this applies to controller index 0 only (see
+    /// VirtualGamepadHub's DualShock4 path, the only consumer of this today).</summary>
+    public required float GyroX { get; init; }
+    public required float GyroY { get; init; }
+    public required float GyroZ { get; init; }
+
+    /// <summary>Real acceleration (g), same single-sensor caveat as GyroX/Y/Z above.</summary>
+    public required float AccelX { get; init; }
+    public required float AccelY { get; init; }
+    public required float AccelZ { get; init; }
 
     /// <summary>
     /// Mirrors main.js parseInputStruct: 4x (HeldKeys u32, LJoyX i32, LJoyY i32, RJoyX i32, RJoyY i32),
-    /// touchX1,Y1,X2,Y2 (u32), accelX,Y,Z (f32), gyroX,Y,Z (f32), frameRate (u32), controllerCount (u32).
+    /// touchX1,Y1,X2,Y2 (u32), accelX,Y,Z (f32), gyroX,Y,Z (f32), frameRate (u32), controllerCount (u32),
+    /// appTarget (u64).
     /// </summary>
     public static HidPacket Parse(ReadOnlySpan<byte> payload)
     {
@@ -76,12 +103,25 @@ public sealed class HidPacket
         // TouchX2/Y2 (bytes offset+8..offset+15) are on the wire but unused - see TouchInjector.
         offset += 16;
 
-        // AccelX/Y/Z, GyroX/Y/Z (24 bytes) are on the wire but unused - skip over them to keep
-        // FrameRate/ControllerCount at the correct offset.
+        // AccelX/Y/Z, GyroX/Y/Z (24 bytes, wire order matches JoyPkg in network.h exactly).
+        var accelX = BinaryPrimitives.ReadSingleLittleEndian(payload[offset..]);
+        var accelY = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 4)..]);
+        var accelZ = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 8)..]);
+        var gyroX = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 12)..]);
+        var gyroY = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 16)..]);
+        var gyroZ = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 20)..]);
         offset += 24;
 
         // FrameRate is on the wire but unused.
         var controllerCount = BinaryPrimitives.ReadUInt32LittleEndian(payload[(offset + 4)..]);
+        offset += 8;
+
+        var appTargetRaw = BinaryPrimitives.ReadUInt64LittleEndian(payload[offset..]);
+        // Defensive default: anything other than a known value (e.g. a mismatched/older client
+        // build) falls back to Big Picture rather than an undefined enum value propagating further.
+        var appTarget = appTargetRaw is (ulong)AppTarget.BigPicture or (ulong)AppTarget.ShadPs4
+            ? (AppTarget)appTargetRaw
+            : AppTarget.BigPicture;
 
         return new HidPacket
         {
@@ -89,6 +129,13 @@ public sealed class HidPacket
             TouchX1 = touchX1,
             TouchY1 = touchY1,
             ControllerCount = controllerCount,
+            AppTarget = appTarget,
+            AccelX = accelX,
+            AccelY = accelY,
+            AccelZ = accelZ,
+            GyroX = gyroX,
+            GyroY = gyroY,
+            GyroZ = gyroZ,
         };
     }
 }

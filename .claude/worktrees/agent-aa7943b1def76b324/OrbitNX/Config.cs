@@ -1,0 +1,89 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace OrbitNX;
+
+public sealed class Config
+{
+    public string ClientIp { get; set; } = "";
+    public int VideoPort { get; set; } = 2222;
+    public int HidPort { get; set; } = 2223;
+    public int AudioPort { get; set; } = 2224;
+    public int TargetWidth { get; set; } = 1280;
+    public int TargetHeight { get; set; } = 720;
+    public int Fps { get; set; } = 60;
+
+    /// <summary>Confirmed live: at 8000-10000 the video stream's constant (CBR) bitrate was
+    /// saturating the real Wi-Fi link's actual sustainable throughput - not just a quality setting,
+    /// this caused severe audio packet loss (a client-side heartbeat log showed one 54-second stretch
+    /// with over 96% of expected RTP/Opus packets never arriving at all) and video's own H.264
+    /// keyframes coming through corrupted (decoded frames with 0x0 dimensions, forcing that session
+    /// to abort and restart) - both symptoms of a genuinely oversaturated channel, not an
+    /// encoder-quality problem (raising the bitrate previously made no visible improvement to picture
+    /// quality precisely because the bottleneck was already the network, not the encoder). 4000
+    /// leaves real headroom for audio (~130kbps) and HID to coexist on the same link instead of
+    /// being crowded out.</summary>
+    public int BitrateKbps { get; set; } = 4000;
+
+    /// <summary>Sample rate the PCM is captured/resampled to before Opus encoding (see
+    /// AudioCaptureSender). RFC 7587 mandates Opus's RTP clock rate be 48000Hz regardless of this
+    /// value, and the client (OrbitNX/source/audio.c) decodes via libavcodec/libswresample rather than
+    /// assuming any particular rate - but 48000 is still the practical choice since it matches the
+    /// Switch's native audout rate and needs no client-side resampling on top of Opus's own.</summary>
+    public int AudioSampleRate { get; set; } = 48000;
+
+    /// <summary>1 (mono) or 2 (stereo) - halving to mono at the same sample rate roughly halves the
+    /// Opus-encoded bitrate, an alternative lever to lowering AudioSampleRate when the client can't
+    /// keep up.</summary>
+    public int AudioChannels { get; set; } = 2;
+
+    /// <summary>Linear gain applied to the audio signal before it's sent (1.0 = unchanged, 0.5 =
+    /// half amplitude/-6dB). Distinct from AudioCaptureSender's peak limiter - that only clips the
+    /// very tips of the loudest peaks, this turns the whole signal down. The client's decode/playback
+    /// is a black box that can't be patched, so a lower overall level is the only lever available
+    /// for amplitude-dependent client-side audio artifacts.</summary>
+    public double AudioGain { get; set; } = 1.0;
+
+    /// <summary>When true (default - matches the client's physical Nintendo Switch controller
+    /// layout), A/B and X/Y are swapped relative to the wire protocol's bit positions before being
+    /// applied to the virtual Xbox 360 controller - see VirtualGamepadHub.</summary>
+    public bool SwitchButtonLayout { get; set; } = true;
+
+    /// <summary>Diagnostic-only: when true, AudioCaptureSender writes to a local "audio_debug.wav" file
+    /// next to the exe instead of streaming to the client over UDP - isolates the host's own
+    /// capture/encode chain from the network and client's decode, to tell whether an audible
+    /// artifact is introduced before or after the audio leaves this machine. Deliberately not
+    /// persisted (JsonIgnore) - always resets to off on the next launch, so it can't be
+    /// accidentally left on and mistaken for a broken stream in a later, unrelated session.</summary>
+    [JsonIgnore]
+    public bool AudioDebugRecordToFile { get; set; }
+
+    private static string ConfigPath =>
+        Path.Combine(AppContext.BaseDirectory, "config.json");
+
+    public static Config Load()
+    {
+        try
+        {
+            if (File.Exists(ConfigPath))
+            {
+                var json = File.ReadAllText(ConfigPath);
+                var cfg = JsonSerializer.Deserialize<Config>(json);
+                if (cfg is not null) return cfg;
+            }
+        }
+        catch
+        {
+            // fall through to defaults on corrupt/unreadable config
+        }
+        return new Config();
+    }
+
+    public void Save()
+    {
+        var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(ConfigPath, json);
+    }
+
+    public bool IsValid() => !string.IsNullOrWhiteSpace(ClientIp);
+}
