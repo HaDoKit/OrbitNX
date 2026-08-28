@@ -26,6 +26,7 @@ public sealed class MainForm : Form
     private readonly ComboBox _resolutionCombo = new();
     private readonly ComboBox _fpsCombo = new();
     private readonly NumericUpDown _bitrateUpDown = new();
+    private readonly CheckBox _adaptiveBitrateCheckBox = new();
     private readonly ComboBox _audioSampleRateCombo = new();
     private readonly ComboBox _audioChannelsCombo = new();
     private readonly TrackBar _audioGainSlider = new();
@@ -153,8 +154,8 @@ public sealed class MainForm : Form
     /// </summary>
     private GroupBox BuildVideoGroup()
     {
-        var group = NewGroup("Видео", 130);
-        var grid = NewSettingsGrid(3);
+        var group = NewGroup("Видео", 160);
+        var grid = NewSettingsGrid(4);
 
         var resolutionLabel = NewFieldLabel("Разрешение:");
         _resolutionCombo.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -195,9 +196,26 @@ public sealed class MainForm : Form
         _bitrateUpDown.Anchor = AnchorStyles.Left;
         _bitrateUpDown.Margin = new Padding(0, 4, 0, 4);
         _bitrateUpDown.Value = Math.Clamp(_config.BitrateKbps, (int)_bitrateUpDown.Minimum, (int)_bitrateUpDown.Maximum);
+        _bitrateUpDown.Enabled = !_config.AdaptiveBitrate;
         _bitrateUpDown.ValueChanged += (_, _) =>
         {
             _config.BitrateKbps = (int)_bitrateUpDown.Value;
+            _config.Save();
+        };
+
+        // When on, AdaptiveBitrateController scales the actual running bitrate down (and back up)
+        // between a fixed floor and this value on its own - the manual field above becomes a
+        // ceiling rather than a fixed value, so it's disabled here rather than left editable but
+        // silently ignored.
+        _adaptiveBitrateCheckBox.Text = "Адаптивный битрейт (авто, по качеству связи)";
+        _adaptiveBitrateCheckBox.AutoSize = true;
+        _adaptiveBitrateCheckBox.Anchor = AnchorStyles.Left;
+        _adaptiveBitrateCheckBox.Margin = new Padding(0, 8, 0, 4);
+        _adaptiveBitrateCheckBox.Checked = _config.AdaptiveBitrate;
+        _adaptiveBitrateCheckBox.CheckedChanged += (_, _) =>
+        {
+            _config.AdaptiveBitrate = _adaptiveBitrateCheckBox.Checked;
+            _bitrateUpDown.Enabled = !_adaptiveBitrateCheckBox.Checked;
             _config.Save();
         };
 
@@ -207,6 +225,8 @@ public sealed class MainForm : Form
         grid.Controls.Add(_fpsCombo, 1, 1);
         grid.Controls.Add(bitrateLabel, 0, 2);
         grid.Controls.Add(_bitrateUpDown, 1, 2);
+        grid.Controls.Add(_adaptiveBitrateCheckBox, 0, 3);
+        grid.SetColumnSpan(_adaptiveBitrateCheckBox, 2);
 
         group.Controls.Add(grid);
         return group;

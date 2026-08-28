@@ -13,6 +13,18 @@ public readonly struct ControllerState
     public required int RJoyX { get; init; }
     public required int RJoyY { get; init; }
 
+    /// <summary>Real acceleration (g) and angular velocity (rad/s, NOT an accumulated angle) from
+    /// this controller's own motion sensor, per the client's libnx HidSixAxisSensorState. Each
+    /// controller now carries its own reading - an earlier protocol version had a single shared
+    /// motion block applied to controller index 0 only ("the primary player"); see
+    /// VirtualGamepadHub.ApplyDs4State, the only consumer of this today.</summary>
+    public required float AccelX { get; init; }
+    public required float AccelY { get; init; }
+    public required float AccelZ { get; init; }
+    public required float GyroX { get; init; }
+    public required float GyroY { get; init; }
+    public required float GyroZ { get; init; }
+
     public bool A => IsSet(0);
     public bool B => IsSet(1);
     public bool X => IsSet(2);
@@ -44,9 +56,43 @@ public enum AppTarget : ulong
     ShadPs4 = 1,
 }
 
+/// <summary>
+/// Sent once by this host, immediately after the HID TCP connection is accepted and before any
+/// HidPacket traffic - lets the client size its video/audio receive buffers (fifo_size, etc.) from
+/// this session's real configured values instead of guessing a default or measuring the stream
+/// after the fact. Mirrors the client's OrbitNxSessionConfig (network.h) field-for-field: 7x
+/// uint32 little-endian, 28 bytes total, no framing/marker needed since it's always the first 28
+/// bytes written to a freshly-accepted connection.
+/// </summary>
+public sealed class SessionConfig
+{
+    public const int WireSize = 28;
+
+    public required uint VideoBitrateKbps { get; init; }
+    public required uint VideoWidth { get; init; }
+    public required uint VideoHeight { get; init; }
+    public required uint VideoFps { get; init; }
+    public required uint AudioBitrateKbps { get; init; }
+    public required uint AudioSampleRate { get; init; }
+    public required uint AudioChannels { get; init; }
+
+    public byte[] ToBytes()
+    {
+        var buffer = new byte[WireSize];
+        BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(0), VideoBitrateKbps);
+        BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(4), VideoWidth);
+        BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(8), VideoHeight);
+        BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(12), VideoFps);
+        BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(16), AudioBitrateKbps);
+        BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(20), AudioSampleRate);
+        BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(24), AudioChannels);
+        return buffer;
+    }
+}
+
 public sealed class HidPacket
 {
-    public const int PayloadSize = 136;
+    public const int PayloadSize = 224;
 
     public required ControllerState[] Controllers { get; init; }
     public required uint TouchX1 { get; init; }
@@ -54,24 +100,20 @@ public sealed class HidPacket
     public required uint ControllerCount { get; init; }
     public required AppTarget AppTarget { get; init; }
 
-    /// <summary>Real angular velocity (rad/s, per the client's libnx HidSixAxisSensorState -
-    /// NOT an accumulated angle), from whichever single physical controller/handheld the client is
-    /// currently reading motion from - there is only one motion sensor's worth of data on the wire
-    /// regardless of ControllerCount, so this applies to controller index 0 only (see
-    /// VirtualGamepadHub's DualShock4 path, the only consumer of this today).</summary>
-    public required float GyroX { get; init; }
-    public required float GyroY { get; init; }
-    public required float GyroZ { get; init; }
-
-    /// <summary>Real acceleration (g), same single-sensor caveat as GyroX/Y/Z above.</summary>
-    public required float AccelX { get; init; }
-    public required float AccelY { get; init; }
-    public required float AccelZ { get; init; }
+    /// <summary>Link-quality telemetry, free-running counters/last-known-values from the client -
+    /// see the client's network.h doc comment on OrbitNxHidPacket's matching fields. Consumed by
+    /// <see cref="OrbitNX.Session.AdaptiveBitrateController"/>, which diffs successive packets
+    /// rather than reading these as absolute values (see that class's doc comment for why).</summary>
+    public required uint VideoReconnectCount { get; init; }
+    public required uint VideoMeasuredBitrateKbps { get; init; }
+    public required uint AudioReconnectCount { get; init; }
+    public required uint AudioConcealedFrameCount { get; init; }
 
     /// <summary>
-    /// Mirrors main.js parseInputStruct: 4x (HeldKeys u32, LJoyX i32, LJoyY i32, RJoyX i32, RJoyY i32),
-    /// touchX1,Y1,X2,Y2 (u32), accelX,Y,Z (f32), gyroX,Y,Z (f32), frameRate (u32), controllerCount (u32),
-    /// appTarget (u64).
+    /// Mirrors the client's OrbitNxHidPacket (network.h) field-for-field: 4x controller blocks
+    /// (HeldKeys u32, LJoyX/Y i32, RJoyX/Y i32, accelX/Y/Z f32, gyroX/Y/Z f32 - 44 bytes each),
+    /// touchX1,Y1,X2,Y2 (u32), frameRate (u32), controllerCount (u32), appTarget (u64), then the
+    /// 4 telemetry u32 fields above (16 bytes).
     /// </summary>
     public static HidPacket Parse(ReadOnlySpan<byte> payload)
     {
@@ -87,6 +129,12 @@ public sealed class HidPacket
             var lJoyY = BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 8)..]);
             var rJoyX = BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 12)..]);
             var rJoyY = BinaryPrimitives.ReadInt32LittleEndian(payload[(offset + 16)..]);
+            var accelX = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 20)..]);
+            var accelY = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 24)..]);
+            var accelZ = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 28)..]);
+            var gyroX = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 32)..]);
+            var gyroY = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 36)..]);
+            var gyroZ = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 40)..]);
             controllers[i] = new ControllerState
             {
                 HeldKeys = (ushort)heldKeys,
@@ -94,23 +142,20 @@ public sealed class HidPacket
                 LJoyY = lJoyY,
                 RJoyX = rJoyX,
                 RJoyY = rJoyY,
+                AccelX = accelX,
+                AccelY = accelY,
+                AccelZ = accelZ,
+                GyroX = gyroX,
+                GyroY = gyroY,
+                GyroZ = gyroZ,
             };
-            offset += 20;
+            offset += 44;
         }
 
         var touchX1 = BinaryPrimitives.ReadUInt32LittleEndian(payload[offset..]);
         var touchY1 = BinaryPrimitives.ReadUInt32LittleEndian(payload[(offset + 4)..]);
         // TouchX2/Y2 (bytes offset+8..offset+15) are on the wire but unused - see TouchInjector.
         offset += 16;
-
-        // AccelX/Y/Z, GyroX/Y/Z (24 bytes, wire order matches JoyPkg in network.h exactly).
-        var accelX = BinaryPrimitives.ReadSingleLittleEndian(payload[offset..]);
-        var accelY = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 4)..]);
-        var accelZ = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 8)..]);
-        var gyroX = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 12)..]);
-        var gyroY = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 16)..]);
-        var gyroZ = BinaryPrimitives.ReadSingleLittleEndian(payload[(offset + 20)..]);
-        offset += 24;
 
         // FrameRate is on the wire but unused.
         var controllerCount = BinaryPrimitives.ReadUInt32LittleEndian(payload[(offset + 4)..]);
@@ -122,6 +167,12 @@ public sealed class HidPacket
         var appTarget = appTargetRaw is (ulong)AppTarget.BigPicture or (ulong)AppTarget.ShadPs4
             ? (AppTarget)appTargetRaw
             : AppTarget.BigPicture;
+        offset += 8;
+
+        var videoReconnectCount = BinaryPrimitives.ReadUInt32LittleEndian(payload[offset..]);
+        var videoMeasuredBitrateKbps = BinaryPrimitives.ReadUInt32LittleEndian(payload[(offset + 4)..]);
+        var audioReconnectCount = BinaryPrimitives.ReadUInt32LittleEndian(payload[(offset + 8)..]);
+        var audioConcealedFrameCount = BinaryPrimitives.ReadUInt32LittleEndian(payload[(offset + 12)..]);
 
         return new HidPacket
         {
@@ -130,12 +181,10 @@ public sealed class HidPacket
             TouchY1 = touchY1,
             ControllerCount = controllerCount,
             AppTarget = appTarget,
-            AccelX = accelX,
-            AccelY = accelY,
-            AccelZ = accelZ,
-            GyroX = gyroX,
-            GyroY = gyroY,
-            GyroZ = gyroZ,
+            VideoReconnectCount = videoReconnectCount,
+            VideoMeasuredBitrateKbps = videoMeasuredBitrateKbps,
+            AudioReconnectCount = audioReconnectCount,
+            AudioConcealedFrameCount = audioConcealedFrameCount,
         };
     }
 }

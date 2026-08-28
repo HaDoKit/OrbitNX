@@ -1,4 +1,5 @@
 using System.Net.Sockets;
+using OrbitNX.Audio;
 using OrbitNX.Input;
 
 namespace OrbitNX.Session;
@@ -82,6 +83,35 @@ public sealed class SessionController : IAsyncDisposable
 
             Logger.Log("SessionController", $"HID connected to {_config.ClientIp}:{_config.HidPort}");
             _currentClient = client;
+
+            // Sent once, immediately, before any HID input traffic - lets the client size its
+            // video/audio buffers from this session's real values instead of guessing. See
+            // Input/HidProtocol.cs's SessionConfig doc comment. A failure here means the
+            // connection isn't really usable (the client will be blocked waiting for these bytes
+            // before it opens its own video/audio streams - see network.h's
+            // networkWaitForSessionConfig on the client), so it's treated the same as a failed
+            // connect: log and retry from the top rather than proceeding into ReadLoopAsync.
+            try
+            {
+                var sessionConfig = new SessionConfig
+                {
+                    VideoBitrateKbps = (uint)_config.BitrateKbps,
+                    VideoWidth = (uint)_config.TargetWidth,
+                    VideoHeight = (uint)_config.TargetHeight,
+                    VideoFps = (uint)_config.Fps,
+                    AudioBitrateKbps = (uint)(AudioCaptureSender.OpusBitrateBps / 1000),
+                    AudioSampleRate = (uint)_config.AudioSampleRate,
+                    AudioChannels = (uint)_config.AudioChannels,
+                };
+                await client.GetStream().WriteAsync(sessionConfig.ToBytes(), ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Logger.Log("SessionController", $"failed to send session config to {_config.ClientIp}: {ex.Message}");
+                _currentClient = null;
+                try { await Task.Delay(1000, ct); } catch (TaskCanceledException) { }
+                continue;
+            }
 
             // A bare TCP accept doesn't confirm the real OrbitNX client is on the other end - some
             // other device on the network can end up holding this IP (DHCP lease reassignment,

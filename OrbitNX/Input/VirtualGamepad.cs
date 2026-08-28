@@ -95,10 +95,7 @@ public sealed class VirtualGamepadHub : IDisposable
                     {
                         _ds4Controllers[id] = PlugInDs4(id);
                     }
-                    // Only one physical motion sensor's worth of data exists on the wire regardless
-                    // of controller count (see HidPacket's doc comment) - applied to controller
-                    // index 0 only, i.e. "the primary player."
-                    ApplyDs4State(_ds4Controllers[id]!, packet.Controllers[i], SwapAbxy, i == 0 ? packet : null);
+                    ApplyDs4State(_ds4Controllers[id]!, packet.Controllers[i], SwapAbxy);
                 }
             }
             else
@@ -249,7 +246,7 @@ public sealed class VirtualGamepadHub : IDisposable
 
     private ushort _ds4Timestamp;
 
-    private void ApplyDs4State(IDualShock4Controller pad, ControllerState s, bool swapAbxy, HidPacket? motionSource)
+    private void ApplyDs4State(IDualShock4Controller pad, ControllerState s, bool swapAbxy)
     {
         Span<byte> report = stackalloc byte[Ds4ReportSize];
 
@@ -289,15 +286,14 @@ public sealed class VirtualGamepadHub : IDisposable
         BinaryPrimitives.WriteUInt16LittleEndian(report[9..11], _ds4Timestamp);
         report[11] = 0xFF; // bBatteryLvl - cosmetic only, "full" placeholder
 
-        if (motionSource is { } m)
-        {
-            WriteS16(report[12..14], m.GyroX * (180f / MathF.PI) * GyroRawUnitsPerDegPerSecond);
-            WriteS16(report[14..16], m.GyroY * (180f / MathF.PI) * GyroRawUnitsPerDegPerSecond);
-            WriteS16(report[16..18], m.GyroZ * (180f / MathF.PI) * GyroRawUnitsPerDegPerSecond);
-            WriteS16(report[18..20], m.AccelX * AccelRawUnitsPerG);
-            WriteS16(report[20..22], m.AccelY * AccelRawUnitsPerG);
-            WriteS16(report[22..24], m.AccelZ * AccelRawUnitsPerG);
-        }
+        // Every controller now carries its own motion reading (see ControllerState's doc comment) -
+        // no more "primary player only" special-casing here.
+        WriteS16(report[12..14], s.GyroX * (180f / MathF.PI) * GyroRawUnitsPerDegPerSecond);
+        WriteS16(report[14..16], s.GyroY * (180f / MathF.PI) * GyroRawUnitsPerDegPerSecond);
+        WriteS16(report[16..18], s.GyroZ * (180f / MathF.PI) * GyroRawUnitsPerDegPerSecond);
+        WriteS16(report[18..20], s.AccelX * AccelRawUnitsPerG);
+        WriteS16(report[20..22], s.AccelY * AccelRawUnitsPerG);
+        WriteS16(report[22..24], s.AccelZ * AccelRawUnitsPerG);
         // Bytes 24-62 (unknown/reserved, secondary battery, touchpad packets) intentionally left
         // zeroed - no Switch-side equivalent data exists for the touchpad, and zero is what an
         // idle/untouched touchpad reports on real hardware.

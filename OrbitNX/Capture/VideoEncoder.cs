@@ -59,6 +59,12 @@ public sealed class VideoEncoder : IDisposable
         _config = config;
     }
 
+    /// <summary>The bitrate actually in use by the currently-running ffmpeg process, or null if
+    /// none is running - <see cref="Config.BitrateKbps"/> alone isn't enough once
+    /// AdaptiveBitrateController can start a process at a lower value than the user's configured
+    /// ceiling (see Start's bitrateKbpsOverride parameter).</summary>
+    public int? ActiveBitrateKbps { get; private set; }
+
     /// <summary>True once ffmpeg has gone too long without reporting encode progress - before the
     /// first frame, "too long" is <see cref="StartupGrace"/> (cold start can legitimately take a
     /// while); afterward it's <paramref name="threshold"/>, the caller-supplied steady-state limit.
@@ -77,10 +83,17 @@ public sealed class VideoEncoder : IDisposable
     /// actually open (this ffmpeg build needs NVIDIA driver 610+ for its NVENC Video Codec SDK
     /// 13.1, or it fails to open at all), and falls back to libx264 (software) if not. Pass
     /// true/false to force one or the other.</param>
-    public void Start(bool? useNvenc = null)
+    /// <param name="bitrateKbpsOverride">Used by AdaptiveBitrateController (Path 1, ffmpeg
+    /// restart-based) to start this process at a lower/raised bitrate than
+    /// <see cref="Config.BitrateKbps"/> without touching (and risking persisting) that field -
+    /// null (default) uses <see cref="Config.BitrateKbps"/> as-is, matching every non-adaptive
+    /// caller.</param>
+    public void Start(bool? useNvenc = null, int? bitrateKbpsOverride = null)
     {
         var ffmpegPath = Path.Combine(AppContext.BaseDirectory, "ffmpeg.exe");
-        var bitrate = $"{_config.BitrateKbps}k";
+        var bitrateKbps = bitrateKbpsOverride ?? _config.BitrateKbps;
+        var bitrate = $"{bitrateKbps}k";
+        ActiveBitrateKbps = bitrateKbps;
         // pkt_size=1316 = 7*188 bytes - a whole number of MPEG-TS packets per UDP datagram, sized
         // to stay under a standard 1500-byte-MTU LAN/Wi-Fi link's payload limit and avoid IP
         // fragmentation (a fragmented UDP datagram only needs to lose one fragment to lose the
@@ -211,6 +224,7 @@ public sealed class VideoEncoder : IDisposable
         catch { /* best-effort teardown */ }
         _ffmpeg?.Dispose();
         _ffmpeg = null;
+        ActiveBitrateKbps = null;
     }
 
     public void Dispose() => Stop();
