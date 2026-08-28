@@ -203,19 +203,23 @@ public sealed class VirtualGamepadHub : IDisposable
         pad.SetAxisValue(Xbox360Axis.RightThumbX, ToShortAxis(ConvertAnalog(s.RJoyX)));
         pad.SetAxisValue(Xbox360Axis.RightThumbY, ToShortAxis(ConvertAnalog(s.RJoyY)));
 
+        // Confirmed live: the two branches below were swapped relative to reality - with
+        // swapAbxy=true (the "Раскладка Switch" toggle checked), the controller actually behaved
+        // as plain Xbox passthrough, and vice versa. Branch bodies fixed in place; the swapAbxy
+        // condition itself is unchanged.
         if (swapAbxy)
-        {
-            pad.SetButtonState(Xbox360Button.B, s.A);
-            pad.SetButtonState(Xbox360Button.A, s.B);
-            pad.SetButtonState(Xbox360Button.X, s.Y);
-            pad.SetButtonState(Xbox360Button.Y, s.X);
-        }
-        else
         {
             pad.SetButtonState(Xbox360Button.B, s.B);
             pad.SetButtonState(Xbox360Button.A, s.A);
             pad.SetButtonState(Xbox360Button.X, s.X);
             pad.SetButtonState(Xbox360Button.Y, s.Y);
+        }
+        else
+        {
+            pad.SetButtonState(Xbox360Button.B, s.A);
+            pad.SetButtonState(Xbox360Button.A, s.B);
+            pad.SetButtonState(Xbox360Button.X, s.Y);
+            pad.SetButtonState(Xbox360Button.Y, s.X);
         }
 
         pad.SetButtonState(Xbox360Button.Back, s.Minus);
@@ -255,9 +259,10 @@ public sealed class VirtualGamepadHub : IDisposable
         report[2] = ToDs4AxisByte(ConvertAnalog(s.RJoyX), invert: false);
         report[3] = ToDs4AxisByte(ConvertAnalog(s.RJoyY), invert: true);
 
+        // See ApplyXbox360State's comment - branches fixed the same way here.
         bool circle, cross, square, triangle;
-        if (swapAbxy) { circle = s.A; cross = s.B; square = s.Y; triangle = s.X; }
-        else { cross = s.A; circle = s.B; square = s.X; triangle = s.Y; }
+        if (swapAbxy) { cross = s.A; circle = s.B; square = s.X; triangle = s.Y; }
+        else { circle = s.A; cross = s.B; square = s.Y; triangle = s.X; }
 
         ushort buttons = (ushort)ToDs4DPadHat(s.Up, s.Down, s.Left, s.Right);
         if (square) buttons |= 1 << 4;

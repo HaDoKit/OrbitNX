@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using OrbitNX.UI.main;
 
 namespace OrbitNX;
 
@@ -26,7 +27,16 @@ internal static class Program
 
         ApplicationConfiguration.Initialize();
 
+        // Hidden switch, not a Config field - the ports section it reveals in Settings is a
+        // developer/troubleshooting tool (matching non-default Switch-side ports), not something
+        // regular use ever needs, so it doesn't persist and isn't discoverable in the UI itself.
+        var devMode = Array.IndexOf(args, "--dev") >= 0;
+
+        // Always 48000 - the patched Switch client's audio.c decode/resample path is compiled in
+        // around that exact rate (see AudioCaptureSender/SettingsView) - overriding here means a
+        // stale non-default value from an old config.json can't silently break audio.
         var config = Config.Load();
+        config.AudioSampleRate = 48000;
         var orchestrator = new AppOrchestrator(config);
 
         using var appIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application;
@@ -38,27 +48,34 @@ internal static class Program
             Visible = true,
         };
 
-        var mainForm = new MainForm(config, orchestrator, trayIcon);
+        // WPF app/window, not WinForms - App.xaml merges the WPF-UI theme/control dictionaries
+        // that MainWindow's controls render against. No StartupUri on App.xaml, so nothing shows
+        // until Run(mainWindow) below - config/orchestrator/tray must exist first (MainWindow binds
+        // to them in its constructor).
+        var app = new App();
+        app.InitializeComponent();
+        app.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+
+        var mainWindow = new MainWindow(config, orchestrator, trayIcon, devMode);
 
         var menu = new ContextMenuStrip();
-        menu.Items.Add("Открыть", null, (_, _) =>
-        {
-            mainForm.Show();
-            mainForm.WindowState = FormWindowState.Normal;
-            mainForm.Activate();
-        });
+        menu.Items.Add("Открыть", null, (_, _) => mainWindow.RestoreFromTray());
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Выход", null, (_, _) => Application.Exit());
-        trayIcon.ContextMenuStrip = menu;
-        trayIcon.DoubleClick += (_, _) =>
+        menu.Items.Add("Выход", null, (_, _) =>
         {
-            mainForm.Show();
-            mainForm.WindowState = FormWindowState.Normal;
-            mainForm.Activate();
-        };
+            mainWindow.AllowClose = true;
+            mainWindow.Close();
+            app.Shutdown();
+        });
+        trayIcon.ContextMenuStrip = menu;
+        trayIcon.DoubleClick += (_, _) => mainWindow.RestoreFromTray();
 
-        Application.ApplicationExit += (_, _) => orchestrator.Dispose();
-        Application.Run(mainForm);
+        app.Exit += (_, _) => orchestrator.Dispose();
+        // A real Windows logoff/shutdown must actually close the window instead of Hide()-ing it
+        // to tray the way a user clicking the close button does - see MainWindow.AllowClose.
+        app.SessionEnding += (_, _) => mainWindow.AllowClose = true;
+
+        app.Run(mainWindow);
     }
 
     /// <summary>Best-effort: brings the already-running instance's window to the front by title.

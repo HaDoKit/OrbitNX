@@ -1,0 +1,26 @@
+{
+    "sourceFile": "OrbitNX/UI/main/MainWindow.xaml.cs",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 2,
+            "patches": [
+                {
+                    "date": 1787926834675,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1787928342285,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -3,7 +3,9 @@\n namespace OrbitNX.UI.main\r\n {\r\n     public partial class MainWindow : Window\r\n     {\r\n-    \r\n+        InitializeComponent(); \r\n+\r\n+         MyButton.Click += (s, e) => MessageBox.Show(\"Кнопка из XAML работает!\");\r\n     }\r\n }\r\n"
+                },
+                {
+                    "date": 1787928395912,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -3,9 +3,12 @@\n namespace OrbitNX.UI.main\r\n {\r\n     public partial class MainWindow : Window\r\n     {\r\n-        InitializeComponent(); \r\n+        public MainWindow()\r\n+        {\r\n+            InitializeComponent();\r\n \r\n-         MyButton.Click += (s, e) => MessageBox.Show(\"Кнопка из XAML работает!\");\r\n+            MyButton.Click += (s, e) => System.Windows.MessageBox.Show(\"Кнопка из XAML работает!\");\r\n+        }\r\n     }\r\n }\r\n"
+                }
+            ],
+            "date": 1787926834675,
+            "name": "Commit-0",
+            "content": "using System.Windows;\r\n\r\nnamespace OrbitNX.UI.main\r\n{\r\n    public partial class MainWindow : Window\r\n    {\r\n    \r\n    }\r\n}\r\n"
+        }
+    ]
+}

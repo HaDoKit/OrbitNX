@@ -1,0 +1,18 @@
+{
+    "sourceFile": "OrbitNX/OrbitNX.csproj",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1787926837542,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1787926837542,
+            "name": "Commit-0",
+            "content": "<Project Sdk=\"Microsoft.NET.Sdk\">\r\n\r\n  <PropertyGroup>\r\n    <OutputType>WinExe</OutputType>\r\n    <TargetFramework>net10.0-windows</TargetFramework>\r\n    <Nullable>enable</Nullable>\r\n    <ImplicitUsings>enable</ImplicitUsings>\r\n    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>\r\n    <UseWindowsForms>true</UseWindowsForms>\r\n    <UseWPF>true</UseWPF> <!-- 2. Включаем поддержку WPF -->\r\n    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>\r\n    <Platforms>x64</Platforms>\r\n    <ApplicationIcon>Assets\\icon.ico</ApplicationIcon>\r\n    <AssemblyName>OrbitNX</AssemblyName>\r\n    <RootNamespace>OrbitNX</RootNamespace>\r\n    <Product>OrbitNX</Product>\r\n    <AssemblyTitle>OrbitNX</AssemblyTitle>\r\n    <LangVersion>latest</LangVersion>\r\n    <ApplicationManifest>app.manifest</ApplicationManifest>\r\n    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>\r\n  </PropertyGroup>\r\n\r\n  <ItemGroup>\r\n    <PackageReference Include=\"Concentus\" Version=\"2.2.2\" />\r\n    <PackageReference Include=\"Microsoft.Windows.CsWin32\" Version=\"0.3.106\">\r\n      <PrivateAssets>all</PrivateAssets>\r\n      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>\r\n    </PackageReference>\r\n    <PackageReference Include=\"Nefarius.ViGEm.Client\" Version=\"1.21.256\" />\r\n    <PackageReference Include=\"System.Management\" Version=\"8.0.0\" />\r\n    <PackageReference Include=\"NAudio\" Version=\"2.2.1\" />\r\n    <PackageReference Include=\"Tomlyn\" Version=\"2.3.2\" />\r\n  </ItemGroup>\r\n\r\n  <ItemGroup>\r\n    <!-- Link flattens the destination to the output root (next to the exe) - DllImport only\r\n         searches the app's base directory, not subfolders, and our ffmpeg path lookups assume\r\n         the same flat layout. -->\r\n    <None Include=\"lib\\ffmpeg.exe\" CopyToOutputDirectory=\"PreserveNewest\" Condition=\"Exists('lib\\ffmpeg.exe')\">\r\n      <Link>ffmpeg.exe</Link>\r\n    </None>\r\n    <None Include=\"Native\\FocusHook\\focushook.dll\" CopyToOutputDirectory=\"PreserveNewest\" Condition=\"Exists('Native\\FocusHook\\focushook.dll')\">\r\n      <Link>focushook.dll</Link>\r\n    </None>\r\n    <None Include=\"Native\\TouchHelper\\touchhelper.exe\" CopyToOutputDirectory=\"PreserveNewest\" Condition=\"Exists('Native\\TouchHelper\\touchhelper.exe')\">\r\n      <Link>touchhelper.exe</Link>\r\n    </None>\r\n    <None Include=\"lib\\vigembus-setup.exe\" CopyToOutputDirectory=\"PreserveNewest\" Condition=\"Exists('lib\\vigembus-setup.exe')\">\r\n      <Link>vigembus-setup.exe</Link>\r\n    </None>\r\n  </ItemGroup>\r\n\r\n</Project>\r\n"
+        }
+    ]
+}
