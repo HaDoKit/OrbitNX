@@ -16,7 +16,7 @@ Licensed under GPLv3 — see [LICENSE](LICENSE).
 4. Test against the console (see `SkyNX/OrbitNX/DEVELOPMENT.md` for the
    Switch-side build/deploy loop).
 5. Logs: `OrbitNX.log`, written next to the exe
-   (`bin/{Debug,Release}/net8.0-windows8.0/`).
+   (`bin/{Debug,Release}/net10.0-windows8.0/`).
 
 No separate publish/installer step is part of this loop — `installer.iss`
 and `publish/win-x64` are release packaging, not dev iteration.

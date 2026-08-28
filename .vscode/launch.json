@@ -12,6 +12,73 @@
             "cwd": "${workspaceFolder}/OrbitNX/bin/Release/net8.0-windows8.0",
             "stopAtEntry": false,
             "console": "internalConsole"
+        },
+        {
+            // Simplified variant: no real debugger attaches, this just builds the DEBUG=1 .nro
+            // and runs `nxlink -a <ip> ... -s` in an integrated terminal. -s makes nxlink wait for
+            // the app's nxlinkStdio() connection (see Client/common/logger/logger.c) and print
+            // everything sent through logWrite() live in this terminal. Requires hbmenu already
+            // open and idle on the Switch before you launch this - nxlink sends to hbmenu's
+            // netloader, there's nothing to receive the file otherwise.
+            "name": "Switch (Debug, logs via nxlink)",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "& 'C:/devkitPro/tools/bin/nxlink.exe' -a ${input:switchIp} '${workspaceFolder}/Client/OrbitNX-Switch-debug.nro' -s",
+            "preLaunchTask": "switch: build (debug)"
+        },
+        {
+            // Full variant: real breakpoints/stepping via GDB, through Atmosphère's built-in
+            // standalone gdbstub. Prerequisites this config can't set up for you:
+            //
+            //   1. Atmosphère 1.2.4 or newer.
+            //   2. On the Switch's SD card, add to sd:/atmosphere/config/system_settings.ini:
+            //        [atmosphere]
+            //        enable_htc = u8!0x0
+            //        enable_standalone_gdbstub = u8!0x1
+            //      then reboot the console. This is a one-time setup step.
+            //   3. Make sure nothing else on the console uses the `dmnt` debug-monitor service
+            //      (e.g. EdiZon) - it conflicts with the gdbstub and can crash the session.
+            //
+            // Per-session flow (F5 automates steps 1-2, the rest is manual in the Debug Console -
+            // the PID and module load offset are only known once GDB reports them at runtime, so
+            // they can't be hardcoded here):
+            //   1. F5 builds the debug .nro and connects GDB to the gdbstub, then runs
+            //      `monitor wait application` (see setupCommands below).
+            //   2. On the Switch, launch OrbitNX-Switch-debug.nro (via hbmenu/nxlink) - once
+            //      started, the Debug Console prints an "Attach to 0xNN" line.
+            //   3. In the Debug Console, run: -exec attach <that PID>
+            //   4. Get the module's load offset: -exec monitor get info
+            //   5. Load symbols at that offset: -exec symbol-file "${workspaceFolder}/Client/OrbitNX-Switch-debug.elf" -o <offset>
+            //
+            // Known caveat from Atmosphère's own docs: debugging a process that uses sockets can
+            // hang the stub, because the stub itself uses sockets - and this app's network.c is
+            // socket-heavy. If a breakpoint inside network.c/logger.c freezes the session, that's
+            // this, not a bug in the code. Always detach (Shift+F5) before closing the app on the
+            // console, or the console can hang.
+            "name": "Switch (Debug, GDB attach via Atmosphère gdbstub)",
+            "type": "cppdbg",
+            "request": "launch",
+            "preLaunchTask": "switch: build (debug)",
+            "program": "${workspaceFolder}/Client/OrbitNX-Switch-debug.elf",
+            "cwd": "${workspaceFolder}/Client",
+            "MIMode": "gdb",
+            "miDebuggerPath": "C:/devkitPro/devkitA64/bin/aarch64-none-elf-gdb.exe",
+            "miDebuggerServerAddress": "${input:switchIp}:22225",
+            "externalConsole": false,
+            "setupCommands": [
+                {
+                    "description": "Wait for the next app launch on the Switch - see the numbered per-session flow in the comment above.",
+                    "text": "monitor wait application",
+                    "ignoreFailures": false
+                }
+            ]
+        }
+    ],
+    "inputs": [
+        {
+            "id": "switchIp",
+            "type": "promptString",
+            "description": "Switch's IP address (System Settings > Internet > Connection Status on the console)"
         }
     ]
 }

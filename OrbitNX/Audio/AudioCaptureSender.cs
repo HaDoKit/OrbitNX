@@ -37,7 +37,9 @@ public sealed class AudioCaptureSender : IDisposable
 
     // Comfortably transparent for stereo general (non-speech) audio at Opus's efficiency - well
     // under the video stream's own bitrate, so this isn't competing meaningfully for bandwidth.
-    private const int OpusBitrateBps = 128_000;
+    // internal, not private: SessionController references this when building the SessionConfig
+    // it sends the client, so the two stay in sync instead of duplicating the literal.
+    internal const int OpusBitrateBps = 128_000;
 
     private readonly Config _config;
 

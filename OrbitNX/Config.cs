@@ -31,6 +31,16 @@ public sealed class Config
     /// being crowded out.</summary>
     public int BitrateKbps { get; set; } = 4000;
 
+    /// <summary>When true, BitrateKbps above is treated as a ceiling rather than a fixed value -
+    /// AdaptiveBitrateController scales the running video encoder's actual bitrate down (and
+    /// cautiously back up) between a fixed floor and this ceiling based on link-quality telemetry
+    /// the client reports every HidPacket (reconnects, concealed audio frames - see
+    /// Input/HidProtocol.cs). MainForm disables the bitrate control while this is on, since the
+    /// manual value no longer reflects what's actually being sent. See
+    /// Session/AdaptiveBitrateController.cs - applies by restarting VideoEncoder's ffmpeg process
+    /// with new args, since it has no live reconfigure of its own.</summary>
+    public bool AdaptiveBitrate { get; set; } = false;
+
     /// <summary>Sample rate the PCM is captured/resampled to before Opus encoding (see
     /// AudioCaptureSender). RFC 7587 mandates Opus's RTP clock rate be 48000Hz regardless of this
     /// value, and the client (OrbitNX/source/audio.c) decodes via libavcodec/libswresample rather than
