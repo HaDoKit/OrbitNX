@@ -1,0 +1,33 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-Command",
+                "try { subst Y: '${workspaceFolder}' } catch {}; $env:DEVKITPRO = '/opt/devkitpro'; Set-Location Y:\\; make"
+            ],
+            "problemMatcher": "$gcc",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "clean",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-Command",
+                "try { subst Y: '${workspaceFolder}' } catch {}; $env:DEVKITPRO = '/opt/devkitpro'; Set-Location Y:\\; make clean"
+            ],
+            "problemMatcher": []
+        }
+    ]
+}

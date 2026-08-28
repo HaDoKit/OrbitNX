@@ -1,0 +1,32 @@
+{
+    "configurations": [
+        {
+            "name": "Switch (devkitA64)",
+            "compilerPath": "C:/devkitPro/devkitA64/bin/aarch64-none-elf-gcc.exe",
+            "includePath": [
+                "${workspaceFolder}/Client/**",
+                "C:/devkitPro/devkitA64/include",
+                "C:/devkitPro/devkitA64/aarch64-none-elf/include",
+                "C:/devkitPro/libnx/include",
+                "C:/devkitPro/portlibs/switch/include"
+            ],
+            "defines": [
+                "__SWITCH__"
+            ],
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "linux-gcc-arm64"
+        },
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/OrbitNX/Native/**"
+            ],
+            "windowsSdkVersion": "10.0.22621.0",
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "windows-msvc-x64"
+        }
+    ],
+    "version": 4
+}
