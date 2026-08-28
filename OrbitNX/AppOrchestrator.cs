@@ -35,6 +35,7 @@ public sealed class AppOrchestrator : IDisposable
     private AppTarget? _activeTarget;
     private bool _pipelineActive;
     private System.Threading.Timer? _contentWindowWatcher;
+    private readonly AdaptiveBitrateController _adaptiveBitrate;
 
     // Rapid client reconnects fire SessionStarted (and SessionStopped) repeatedly - confirmed
     // live: a client that connects/disconnects several times in under a second caused 5 Steam
@@ -53,6 +54,7 @@ public sealed class AppOrchestrator : IDisposable
         _session.SessionStarted += OnSessionStarted;
         _session.SessionStopped += OnSessionStopped;
         _session.PacketReceived += OnPacketReceived;
+        _adaptiveBitrate = new AdaptiveBitrateController(config, ApplyAdaptiveBitrate);
     }
 
     /// <summary>Whether the app is currently armed (listening for a client) - driven by the main
@@ -221,6 +223,7 @@ public sealed class AppOrchestrator : IDisposable
 
             _videoEncoder = new VideoEncoder(_config);
             _videoEncoder.Start();
+            _adaptiveBitrate.Start(_config.BitrateKbps);
 
             // Captures whatever is currently playing on the first user's real default audio
             // device directly via WASAPI loopback - see AudioCaptureSender.
@@ -271,22 +274,49 @@ public sealed class AppOrchestrator : IDisposable
 
     /// <summary>Kills and restarts the ffmpeg video process from scratch - see
     /// VideoEncoder.IsStalled's doc comment for why this exists (a hung Windows.Graphics.Capture
-    /// source that nothing else notices or recovers from). Caller must already hold
-    /// <see cref="_pipelineGate"/>. Mirrors RestartAudioEncoder: failures here must never take down
-    /// audio/gamepad, so they're caught and logged rather than propagated.</summary>
-    private void RestartVideoEncoder(string reason)
+    /// source that nothing else notices or recovers from), and AdaptiveBitrateController's class
+    /// doc comment for the other caller (a deliberate bitrate change - VideoEncoder has no live
+    /// reconfigure, so a change means killing and relaunching the process with new args). Caller
+    /// must already hold <see cref="_pipelineGate"/>. Mirrors RestartAudioEncoder: failures here
+    /// must never take down audio/gamepad, so they're caught and logged rather than propagated.</summary>
+    /// <param name="bitrateKbpsOverride">Explicit target for an adaptive-bitrate-driven restart -
+    /// null (the watchdog's case) carries over whatever bitrate the outgoing encoder was actually
+    /// running at, so a stall-triggered restart doesn't silently undo an adaptive change by jumping
+    /// back to Config.BitrateKbps (the ceiling).</param>
+    private void RestartVideoEncoder(string reason, int? bitrateKbpsOverride = null)
     {
         try
         {
             Logger.Log("AppOrchestrator", $"restarting video encoder ({reason})");
+            var carryOverBitrate = bitrateKbpsOverride ?? _videoEncoder?.ActiveBitrateKbps;
             _videoEncoder?.Stop();
             _videoEncoder = new VideoEncoder(_config);
-            _videoEncoder.Start();
+            _videoEncoder.Start(bitrateKbpsOverride: carryOverBitrate);
         }
         catch (Exception ex)
         {
             Logger.Log("AppOrchestrator", $"video encoder restart failed ({reason}): {ex}");
         }
+    }
+
+    /// <summary>AdaptiveBitrateController's apply callback - runs on its own Timer thread, not
+    /// holding <see cref="_pipelineGate"/>, so this acquires it itself (mirrors
+    /// ScheduleDelayedAudioRestart) and bails out quietly if the session ended in the meantime.</summary>
+    private void ApplyAdaptiveBitrate(int bitrateKbps)
+    {
+        _ = Task.Run(async () =>
+        {
+            await _pipelineGate.WaitAsync();
+            try
+            {
+                if (!_pipelineActive) return;
+                RestartVideoEncoder($"adaptive bitrate -> {bitrateKbps} kbps", bitrateKbps);
+            }
+            finally
+            {
+                _pipelineGate.Release();
+            }
+        });
     }
 
     /// <summary>Runs RestartAudioEncoder a few seconds from now instead of immediately - see the
@@ -533,6 +563,7 @@ public sealed class AppOrchestrator : IDisposable
             _contentWindowWatcher?.Dispose();
             _contentWindowWatcher = null;
 
+            _adaptiveBitrate.Stop();
             _videoEncoder?.Stop();
             _audioEncoder?.Stop();
             _gamepads.DisconnectAll();
@@ -593,6 +624,15 @@ public sealed class AppOrchestrator : IDisposable
         {
             Logger.Log("AppOrchestrator", $"touch inject failed: {ex}");
         }
+
+        try
+        {
+            _adaptiveBitrate.OnPacketReceived(packet);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("AppOrchestrator", $"adaptive bitrate telemetry update failed: {ex}");
+        }
     }
 
     public void Dispose()
@@ -603,6 +643,7 @@ public sealed class AppOrchestrator : IDisposable
         _gamepads.Dispose();
         _touch.Dispose();
         _gameActiveSignal.Dispose();
+        _adaptiveBitrate.Dispose();
         _pipelineGate.Dispose();
     }
 }

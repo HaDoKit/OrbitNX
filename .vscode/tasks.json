@@ -30,39 +30,60 @@
             "problemMatcher": []
         },
         {
+            // "type": "shell" already wraps `command` in VS Code's own configured shell
+            // (powershell.exe on Windows by default) - `command: "powershell"` + a `-Command` arg
+            // used to add a SECOND powershell layer on top of that, and the single-quoted strings
+            // inside the inner -Command string collided with the outer layer's own quoting, closing
+            // early (confirmed live: "$env:DEVKITPRO = '/opt/devkitpro'" ran with /opt/devkitpro
+            // parsed as a command name, not a string value assigned to the variable). `command` is
+            // now the raw command line itself, run through exactly one shell layer.
+            //
+            // Uses devkitPro's own bash.exe (a login shell) rather than setting $env:DEVKITPRO from
+            // PowerShell and calling devkitPro's make.exe directly - confirmed live earlier in this
+            // project that devkitPro's separate MSYS2 runtime does not reliably inherit DEVKITPRO
+            // (or other vars) set by a foreign shell process, but its own bash -lc correctly sources
+            // it from its own profile setup every time.
+            //
+            // `make -C /y` (not `cd '/y' && make`) - VS Code's default shell here is Windows
+            // PowerShell 5.1 (not PowerShell 7+), which does not support && as a statement
+            // separator at all (confirmed live: "Лексема "&&" не является допустимым разделителем
+            // операторов в этой версии" even with && sitting inside an apparently-quoted string
+            // passed to bash.exe - something about how VS Code hands the command to
+            // powershell.exe -Command still exposes it to PowerShell 5.1's own tokenizer). make's
+            // own -C flag changes directory before reading the makefile, same effect as cd, with no
+            // shell compound-statement syntax needed at all.
             "label": "switch: build",
             "type": "shell",
-            "command": "powershell",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "${workspaceFolder}/OrbitNX Client/OrbitNX/scripts/build.ps1"
-            ],
+            "command": "try { subst Y: '${workspaceFolder}/Client' } catch {}; & 'C:/devkitPro/msys2/usr/bin/bash.exe' -lc 'make -C /y'",
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "switch: build (debug)",
+            "type": "shell",
+            "command": "try { subst Y: '${workspaceFolder}/Client' } catch {}; & 'C:/devkitPro/msys2/usr/bin/bash.exe' -lc 'make -C /y debug'",
             "problemMatcher": "$gcc"
         },
         {
             "label": "switch: deploy",
             "type": "shell",
-            "command": "powershell",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "${workspaceFolder}/OrbitNX Client/OrbitNX/scripts/deploy.ps1"
-            ],
+            "command": "& 'C:/devkitPro/tools/bin/nxlink.exe' -a ${input:switchIp} '${workspaceFolder}/Client/OrbitNX-Switch.nro'",
             "problemMatcher": [],
             "dependsOn": "switch: build"
         },
         {
-            "label": "switch: build+deploy",
+            "label": "switch: deploy (debug, live log)",
             "type": "shell",
-            "command": "powershell",
-            "args": [
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-Command",
-                "& '${workspaceFolder}/OrbitNX Client/OrbitNX/scripts/build.ps1'; if ($LASTEXITCODE -eq 0) { & '${workspaceFolder}/OrbitNX Client/OrbitNX/scripts/deploy.ps1' }"
-            ],
-            "problemMatcher": []
+            "command": "& 'C:/devkitPro/tools/bin/nxlink.exe' -a ${input:switchIp} '${workspaceFolder}/Client/OrbitNX-Switch-debug.nro' -s",
+            "problemMatcher": [],
+            "dependsOn": "switch: build (debug)",
+            "isBackground": true
+        }
+    ],
+    "inputs": [
+        {
+            "id": "switchIp",
+            "type": "promptString",
+            "description": "Switch's IP address (System Settings > Internet > Connection Status on the console)"
         }
     ]
 }

@@ -1,0 +1,18 @@
+{
+    "sourceFile": "Client/main.c",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1786258550807,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1786258550807,
+            "name": "Commit-0",
+            "content": "_Bool initAudio() {\r\n    return 0;\r\n}\r\n\r\n_Bool initVideo() {\r\n    return 0;\r\n}\r\n\r\n_Bool initInput() {\r\n\r\n}\r\n\r\n_Bool initNetwork() {\r\n\r\n}\r\n\r\n_Bool startNetwork() {\r\n\r\n}\r\n\r\n_Bool startAudioVideo() {\r\n\r\n}\r\n\r\n_Bool startInput() {\r\n\r\n}\r\n\r\n_Bool init() {\r\n\r\n}\r\n\r\nvoid main() {\r\n\r\n}"
+        }
+    ]
+}
