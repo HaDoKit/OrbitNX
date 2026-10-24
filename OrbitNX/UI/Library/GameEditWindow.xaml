@@ -168,8 +168,9 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="Изображение" Style="{StaticResource FieldLabel}" />
                         <CheckBox x:Name="CaptureWindowCheck" Grid.Column="1" Foreground="White"
-                                  Content="Показывать на Switch только окно игры"
-                                  ToolTip="Игра растягивается на экран Switch, даже если на PC она в окне. Снимите, если изображение чёрное — тогда будет показан весь монитор." />
+                                  ToolTip="Игра растягивается на экран Switch, даже если на PC она в окне. Снимите, если изображение чёрное — тогда будет показан весь монитор.">
+                            <TextBlock Text="Показывать на Switch только окно игры" TextWrapping="Wrap" />
+                        </CheckBox>
                     </Grid>
                 </StackPanel>
 
