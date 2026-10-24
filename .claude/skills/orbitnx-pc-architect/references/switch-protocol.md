@@ -8,10 +8,10 @@ both sides in the same commit.
 
 | Field | Default | Transport | Roles |
 |---|---|---|---|
-| `VideoPort` | 2222 | UDP | ffmpeg sends to `ClientIp:2222`; Switch listens |
-| `HidPort` | 2223 | TCP | Switch binds/listens/accepts; `SessionController` dials out |
-| `AudioPort` | 2224 | UDP | `AudioCaptureSender` sends; Switch listens |
-| `LibraryPort` | 2225 | TCP | Switch listens from app start; `LibraryPusher` dials every 5s while armed |
+| `VideoPort` | 19000 | UDP | ffmpeg sends to `ClientIp:19000`; Switch listens |
+| `HidPort` | 19001 | TCP | Switch binds/listens/accepts; `SessionController` dials out |
+| `AudioPort` | 19002 | UDP | `AudioCaptureSender` sends; Switch listens |
+| `LibraryPort` | 19003 | TCP | Switch listens from app start; `LibraryPusher` dials every 5s while armed |
 
 ## HID connection lifecycle (`Session/SessionController.cs`)
 
@@ -68,7 +68,7 @@ WASAPI loopback (`NAudio`) → 20ms frames → Opus 128kbps (Concentus) → `Rtp
 Opus payload, one unit per datagram. No PC-side A/V sync — **don't add any**; the streams are
 independent by design.
 
-## Library channel (PC → Switch, TCP 2225) — `Library/LibraryWire.cs` ↔ `Client/library/library.c`
+## Library channel (PC → Switch, TCP 19003) — `Library/LibraryWire.cs` ↔ `Client/library/library.c`
 
 One exchange per connection, little-endian:
 1. host → Switch: `u32 magic "ONXL" (0x4C584E4F)`, `u32 version (1)`, `u64 hash` (first 8 bytes of

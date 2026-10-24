@@ -6,15 +6,15 @@ namespace OrbitNX;
 public sealed class Config
 {
     public string ClientIp { get; set; } = "";
-    public int VideoPort { get; set; } = 2222;
-    public int HidPort { get; set; } = 2223;
-    public int AudioPort { get; set; } = 2224;
+    public int VideoPort { get; set; } = 19000;
+    public int HidPort { get; set; } = 19001;
+    public int AudioPort { get; set; } = 19002;
 
     /// <summary>shadPS4 game-library picker channel (separate TCP port from HidPort - that one is
     /// fixed-size/fixed-rate/one-way, no room for a variable-length game list + icons). Next free
-    /// port after 2222/2223/2224. Keep numerically identical to LIBRARY_PORT in
-    /// OrbitNX Client/OrbitNX/source/network.h (separate repo, no shared build).</summary>
-    public int LibraryPort { get; set; } = 2225;
+    /// port after 19000/19001/19002. Keep numerically identical to ORBITNX_LIBRARY_PORT in
+    /// Client/network/network.h (no shared build).</summary>
+    public int LibraryPort { get; set; } = 19003;
     public int TargetWidth { get; set; } = 1280;
     public int TargetHeight { get; set; } = 720;
     public int Fps { get; set; } = 60;
@@ -97,7 +97,11 @@ public sealed class Config
             {
                 var json = File.ReadAllText(ConfigPath);
                 var cfg = JsonSerializer.Deserialize<Config>(json);
-                if (cfg is not null) return cfg;
+                if (cfg is not null)
+                {
+                    cfg.MigrateLegacyPorts();
+                    return cfg;
+                }
             }
         }
         catch
@@ -105,6 +109,17 @@ public sealed class Config
             // fall through to defaults on corrupt/unreadable config
         }
         return new Config();
+    }
+
+    /// <summary>Ports moved from 2222-2225 to 19000-19003. A config.json saved before that still
+    /// holds the old defaults, which the new Switch client no longer listens on - map exactly those
+    /// old defaults to the new ones, but leave any port a user set by hand alone.</summary>
+    private void MigrateLegacyPorts()
+    {
+        if (VideoPort == 2222) VideoPort = 19000;
+        if (HidPort == 2223) HidPort = 19001;
+        if (AudioPort == 2224) AudioPort = 19002;
+        if (LibraryPort == 2225) LibraryPort = 19003;
     }
 
     public void Save()

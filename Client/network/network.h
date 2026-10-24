@@ -6,10 +6,10 @@
 
 // Ports must exactly match OrbitNX/Config.cs on the PC host - see
 // .claude/skills/orbitnx-pc-architect/references/switch-protocol.md.
-#define ORBITNX_VIDEO_PORT 2222 // UDP, PC -> Switch, MPEG-TS/H264 (opened via libavformat, video.c)
-#define ORBITNX_AUDIO_PORT 2224 // UDP, PC -> Switch, custom RTP-ish framing (opened via avio, audio.c)
-#define ORBITNX_HID_PORT   2223 // TCP, Switch listens+accepts, PC dials in (this module)
-#define ORBITNX_LIBRARY_PORT 2225 // TCP, Switch listens+accepts, PC dials in to push its game library (library/library.c)
+#define ORBITNX_VIDEO_PORT 19000 // UDP, PC -> Switch, MPEG-TS/H264 (opened via libavformat, video.c)
+#define ORBITNX_AUDIO_PORT 19002 // UDP, PC -> Switch, custom RTP-ish framing (opened via avio, audio.c)
+#define ORBITNX_HID_PORT   19001 // TCP, Switch listens+accepts, PC dials in (this module)
+#define ORBITNX_LIBRARY_PORT 19003 // TCP, Switch listens+accepts, PC dials in to push its game library (library/library.c)
 
 // The host (OrbitNX/Input/HidProtocol.cs, HidFrameReader) resyncs on this exact 8-byte marker and
 // then reads exactly ORBITNX_HID_PAYLOAD_SIZE bytes as one packet. Both the marker bytes and the

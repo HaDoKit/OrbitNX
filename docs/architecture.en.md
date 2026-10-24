@@ -18,10 +18,10 @@ flowchart LR
         ctl["buttons, sticks, touch, gyro"]
         menu["My games menu with covers"]
     end
-    cap -- "UDP 2222 · MPEG-TS/H.264" --> dec
-    aud -- "UDP 2224" --> play
-    ctl -- "TCP 2223" --> inp
-    lib -- "TCP 2225" --> menu
+    cap -- "UDP 19000 · MPEG-TS/H.264" --> dec
+    aud -- "UDP 19002" --> play
+    ctl -- "TCP 19001" --> inp
+    lib -- "TCP 19003" --> menu
 ```
 
 The PC opens all TCP connections: the Switch only listens on its ports, so the PC doesn't need to

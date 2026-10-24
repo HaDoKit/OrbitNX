@@ -25,7 +25,7 @@ UI (`UI/main/MainWindow`, `HomeView`, `UI/Settings/SettingsView`) only calls int
 
 ## `Config.cs` (`config.json` next to the exe)
 
-`ClientIp`, `VideoPort` 2222, `HidPort` 2223, `AudioPort` 2224, `LibraryPort` 2225 (unused),
+`ClientIp`, `VideoPort` 19000, `HidPort` 19001, `AudioPort` 19002, `LibraryPort` 19003 (unused),
 `TargetWidth`/`TargetHeight` 1280×720, `Fps` 60, `BitrateKbps` 4000 (higher saturated the real
 Wi-Fi link - see its doc comment), `AdaptiveBitrate`, `AudioSampleRate` (forced to 48000 in
 `Program.cs`), `AudioChannels`, `AudioGain`, `SwitchButtonLayout`, `RestartBigPictureAfterGame`

@@ -18,10 +18,10 @@ flowchart LR
         ctl["кнопки, стики, касания, гироскоп"]
         menu["меню «My games» с обложками"]
     end
-    cap -- "UDP 2222 · MPEG-TS/H.264" --> dec
-    aud -- "UDP 2224" --> play
-    ctl -- "TCP 2223" --> inp
-    lib -- "TCP 2225" --> menu
+    cap -- "UDP 19000 · MPEG-TS/H.264" --> dec
+    aud -- "UDP 19002" --> play
+    ctl -- "TCP 19001" --> inp
+    lib -- "TCP 19003" --> menu
 ```
 
 Все TCP-соединения устанавливает ПК: Switch только слушает порты, поэтому на ПК не нужно открывать

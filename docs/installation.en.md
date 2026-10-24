@@ -26,10 +26,10 @@ used (details in [How it works](architecture.en.md)):
 
 | Port | Protocol | Purpose |
 |---|---|---|
-| 2222 | UDP | video (PC → Switch) |
-| 2223 | TCP | input (Switch → PC) |
-| 2224 | UDP | audio (PC → Switch) |
-| 2225 | TCP | game library (PC → Switch) |
+| 19000 | UDP | video (PC → Switch) |
+| 19001 | TCP | input (Switch → PC) |
+| 19002 | UDP | audio (PC → Switch) |
+| 19003 | TCP | game library (PC → Switch) |
 
 ## Installing on the PC
 

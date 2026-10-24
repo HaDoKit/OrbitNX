@@ -7,8 +7,8 @@ sides in the same commit.
 
 ## Ports (`network/network.h`)
 
-`ORBITNX_VIDEO_PORT 2222` (UDP in), `ORBITNX_HID_PORT 2223` (TCP, this side listens),
-`ORBITNX_AUDIO_PORT 2224` (UDP in), `ORBITNX_LIBRARY_PORT 2225` (TCP, this side listens). Must
+`ORBITNX_VIDEO_PORT 19000` (UDP in), `ORBITNX_HID_PORT 19001` (TCP, this side listens),
+`ORBITNX_AUDIO_PORT 19002` (UDP in), `ORBITNX_LIBRARY_PORT 19003` (TCP, this side listens). Must
 match `OrbitNX/Config.cs`.
 
 ## Socket service (`networkInit`)
@@ -54,7 +54,7 @@ maps Minus+Plus to Guide/PS, and holding Minus for 3s is the client's back-to-me
 
 ## Video (UDP in)
 
-`udp://0.0.0.0:2222?fifo_size=0&buffer_size=262144`, opened by `avformat_open_input` (see
+`udp://0.0.0.0:19000?fifo_size=0&buffer_size=262144`, opened by `avformat_open_input` (see
 `decode-pipeline.md`). **`fifo_size=0`, explicitly** (omitting it leaves the default ~5MB fifo on): libavformat's fifo thread makes the reader wait on a
 condition variable that never consults the interrupt callback, so exit/back-to-menu hung while
 waiting for a stream (confirmed live: black screen). Without it `udp_read` polls in 100ms steps and
@@ -74,4 +74,4 @@ mutex and bumps `libraryVersion()`; the menu rebuilds its textures when that cha
 
 ## Audio (UDP in)
 
-Raw socket on 2224 — framing in `audio-pipeline.md`.
+Raw socket on 19002 — framing in `audio-pipeline.md`.

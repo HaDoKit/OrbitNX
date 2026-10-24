@@ -22,7 +22,7 @@ namespace OrbitNX.ShadPs4;
 /// </summary>
 public static class LibraryProtocol
 {
-    public const int Port = 2225;
+    public const int Port = 19003;
     private static readonly byte[] Magic = { (byte)'O', (byte)'N', (byte)'X', (byte)'L' };
     public const byte ProtocolVersion = 1;
     public const byte MsgTypeList = 1;

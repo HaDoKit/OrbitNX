@@ -21,10 +21,10 @@ Three independent, unsynchronized streams to the Switch's IP:
 
 | Stream | Transport | Port | Direction | Payload |
 |---|---|---|---|---|
-| Video | UDP (MPEG-TS) | 2222 | PC → Switch | H.264 High profile, produced by a child `ffmpeg.exe` |
-| HID | TCP | 2223 | PC dials the Switch, Switch listens | 28-byte `SessionConfig` PC→Switch once, then 8×`0xFF` marker + 224-byte `HidPacket` Switch→PC at ~43Hz |
-| Audio | UDP (RTP-like) | 2224 | PC → Switch | Opus (Concentus), hand-rolled RTP header + 2-byte length prefix |
-| Library | TCP | 2225 | PC dials the Switch every 5s while armed | game list (id, name, 240×360 JPEG cover), sent only when the content hash changed |
+| Video | UDP (MPEG-TS) | 19000 | PC → Switch | H.264 High profile, produced by a child `ffmpeg.exe` |
+| HID | TCP | 19001 | PC dials the Switch, Switch listens | 28-byte `SessionConfig` PC→Switch once, then 8×`0xFF` marker + 224-byte `HidPacket` Switch→PC at ~43Hz |
+| Audio | UDP (RTP-like) | 19002 | PC → Switch | Opus (Concentus), hand-rolled RTP header + 2-byte length prefix |
+| Library | TCP | 19003 | PC dials the Switch every 5s while armed | game list (id, name, 240×360 JPEG cover), sent only when the content hash changed |
 
 The Switch player picks a target in the client's menu (`AppTarget`: Big Picture, shadPS4, or a
 game from the host's own **library**); the host launches/focuses it on the PC's normal desktop and
@@ -45,7 +45,7 @@ captures the primary monitor.
 | `Input/TouchInjector.cs` | Single touch → `touchhelper.exe` child process (InjectTouchInput) |
 | `Input/GameBarSuppressor.cs` | Stubs `ms-gamebar:` so a new virtual Xbox pad doesn't pop a Game Bar dialog |
 | `BigPicture/SteamLauncher.cs` | Steam detect/launch, Big Picture open/close, content-window detection, closing the game on disconnect |
-| `Library/` | User game library: `GameLibrary` (library.json + covers/), `GameLauncher` (Native exe / Steam `rungameid` / Emulator template / cmd Script), `LibraryPusher` + `LibraryWire` (port 2225 protocol), `CoverImage` (→ 240×360 JPEG), `SteamLibraryScanner` (installed games + capsule art) |
+| `Library/` | User game library: `GameLibrary` (library.json + covers/), `GameLauncher` (Native exe / Steam `rungameid` / Emulator template / cmd Script), `LibraryPusher` + `LibraryWire` (port 19003 protocol), `CoverImage` (→ 240×360 JPEG), `SteamLibraryScanner` (installed games + capsule art) |
 | `ShadPs4/` | shadPS4 launcher (`--big-picture`); `ShadPs4Library*`/`LibraryProtocol`/`ParamSfoReader` are deprecated and unwired |
 | `Native/` | `ChildProcessJob` (kill children with this process), `ProcessImagePath` (limited-rights exe path), `TrackedProcess` + `ProcessTree` (follow a game by pid/start time, optionally through descendants, via Toolhelp - no handles), `Mmcss`, `TimerResolution`, `TouchHelper/` (native helper) |
 | `UI/` | WPF `MainWindow`/`HomeView`/`SettingsView`/`Library/LibraryView` + `GameEditWindow` — UI only |

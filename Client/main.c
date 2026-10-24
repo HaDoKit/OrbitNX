@@ -105,7 +105,7 @@ static void pauseHidWhileMenu(void) {
     atomic_store(&s_hidPaused, false);
 }
 
-// Blocks forever: accepts one HID client at a time on ORBITNX_HID_PORT (2223, matching
+// Blocks forever: accepts one HID client at a time on ORBITNX_HID_PORT (19001, matching
 // OrbitNX/Config.cs's HidPort) and keeps sending framed OrbitNxHidPacket payloads (real live
 // input state, read fresh from input.c every packet) until the send fails (PC disconnected) or the
 // player asks to go back to the menu, then goes back to waiting for a reconnect - mirrors the

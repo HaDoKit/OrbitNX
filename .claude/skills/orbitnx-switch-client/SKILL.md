@@ -18,10 +18,10 @@ back.
 
 | Stream | Transport | Port | This side |
 |---|---|---|---|
-| Video | UDP, MPEG-TS/H.264 High | 2222 | passive listener via libavformat (`video.c`) |
-| HID | TCP | 2223 | **listens + accepts** (`network.c`); PC dials in, sends a 28-byte `SessionConfig`, then this side sends marker + 224-byte packet at ~43Hz |
-| Audio | UDP, RTP-like + Opus | 2224 | raw BSD socket (`audio.c`) |
-| Library | TCP | 2225 | **listens** from app start (`library/library.c`); host pushes its game list + covers when it changes |
+| Video | UDP, MPEG-TS/H.264 High | 19000 | passive listener via libavformat (`video.c`) |
+| HID | TCP | 19001 | **listens + accepts** (`network.c`); PC dials in, sends a 28-byte `SessionConfig`, then this side sends marker + 224-byte packet at ~43Hz |
+| Audio | UDP, RTP-like + Opus | 19002 | raw BSD socket (`audio.c`) |
+| Library | TCP | 19003 | **listens** from app start (`library/library.c`); host pushes its game list + covers when it changes |
 
 ## Layout
 
@@ -34,7 +34,7 @@ back.
 | `audio/` | UDP receive, RTP-ish parse, Opus decode + PLC, `audout` playback |
 | `input/` | 4 pads, touch, per-player sixaxis → `OrbitNxHidPacket`; hold-Minus back-to-menu gesture |
 | `menu/` | App-selection screen (own SDL window/renderer, shared system font, star animation) + library cover grid |
-| `library/` | Library receiver thread (port 2225), in-memory entries (id, name, JPEG cover) under a mutex |
+| `library/` | Library receiver thread (port 19003), in-memory entries (id, name, JPEG cover) under a mutex |
 | `common/logger/` | `logWrite()` (stdout under a mutex; nxlink in DEBUG builds), FFmpeg `av_log` bridge |
 | `common/fontcache/` | Third-party SDL_FontCache |
 | `romfs/icons/` | Menu tile icons |
