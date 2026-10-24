@@ -73,7 +73,7 @@ gcc -O2 OrbitNX/Native/TouchHelper/touchhelper.c -o OrbitNX/Native/TouchHelper/t
 ### Installer
 
 ```
-powershell -ExecutionPolicy Bypass -File OrbitNX/scripts/build-installer.ps1 [-Version 0.1.0-alpha]
+powershell -ExecutionPolicy Bypass -File OrbitNX/scripts/build-installer.ps1
 ```
 
 The script runs `dotnet publish` (win-x64, self-contained), then compiles `installer.iss` with
@@ -133,24 +133,6 @@ The Title ID is pinned (`01E7E36C3EA40000`), so a rebuilt forwarder updates the 
 installed. The forwarder only launches the `.nro`: to update the app, just copy a new `.nro`; there's
 no need to reinstall the tile. Launched from the tile, the app runs as a full application rather than
 the album applet, so it gets all the available memory.
-
-## Versions
-
-The version number lives in one place: the [`VERSION`](VERSION) file at the repository root. Every
-part reads it from there:
-
-- `OrbitNX.csproj`: the assembly version; the app shows it in the window title and writes it as the
-  first line of `OrbitNX.log`;
-- `Client/Makefile`: the version in the `.nro` metadata (`.nacp`) and in the top-right corner of the
-  Switch menu;
-- `installer.iss`: the installer version.
-
-Numbering follows [SemVer](https://semver.org/): `MAJOR.MINOR.PATCH`, with an `-alpha` suffix while
-in alpha (`0.1.0-alpha`, `0.1.1-alpha`, …). `MINOR` goes up for new features or a change to the
-PC↔Switch protocol, `PATCH` for fixes.
-
-When the version changes, update `VERSION`, add a section to [CHANGELOG.md](CHANGELOG.md) and
-[CHANGELOG.en.md](CHANGELOG.en.md), and if the tested configuration changed, update it in the README.
 
 ## Before changing code
 

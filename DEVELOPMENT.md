@@ -72,7 +72,7 @@ gcc -O2 OrbitNX/Native/TouchHelper/touchhelper.c -o OrbitNX/Native/TouchHelper/t
 ### Установщик
 
 ```
-powershell -ExecutionPolicy Bypass -File OrbitNX/scripts/build-installer.ps1 [-Version 0.1.0-alpha]
+powershell -ExecutionPolicy Bypass -File OrbitNX/scripts/build-installer.ps1
 ```
 
 Скрипт выполняет `dotnet publish` (win-x64, self-contained), затем собирает `installer.iss` через
@@ -132,23 +132,6 @@ Title ID закреплён (`01E7E36C3EA40000`), поэтому новая сб
 плитку. Форвардер только запускает `.nro`: чтобы обновить приложение, достаточно скопировать новый
 `.nro`, переустанавливать плитку не нужно. Запущенное с плитки, приложение работает как полноценная
 программа, а не как апплет альбома, и получает всю доступную память.
-
-## Версии
-
-Номер версии хранится в одном месте — в файле [`VERSION`](VERSION) в корне репозитория. Оттуда его
-берут все части:
-
-- `OrbitNX.csproj` — версия сборки; приложение показывает её в заголовке окна и пишет первой строкой
-  в `OrbitNX.log`;
-- `Client/Makefile` — версия в метаданных `.nro` (`.nacp`) и в правом верхнем углу меню Switch;
-- `installer.iss` — версия установщика.
-
-Нумерация — [SemVer](https://semver.org/lang/ru/): `MAJOR.MINOR.PATCH`, пока идёт альфа — с
-суффиксом `-alpha` (`0.1.0-alpha`, `0.1.1-alpha`, …). `MINOR` растёт при новых возможностях или
-изменении протокола между ПК и Switch, `PATCH` — при исправлениях.
-
-При смене версии обновите `VERSION`, добавьте раздел в [CHANGELOG.md](CHANGELOG.md) и
-[CHANGELOG.en.md](CHANGELOG.en.md), а если изменилась проверенная конфигурация — обновите её в README.
 
 ## Прежде чем менять код
 
