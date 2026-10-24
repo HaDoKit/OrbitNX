@@ -7,15 +7,12 @@
 OrbitNX runs on two devices on the same network: the PC runs the game and sends video and audio; the
 Switch shows them and sends input back.
 
-```
-            PC (Windows)                                 Nintendo Switch
- ┌─────────────────────────────┐                  ┌───────────────────────────┐
- │ OrbitNX                     │  video + audio   │ OrbitNX for Switch        │
- │  • launches the game        │ ───────────────▶ │  • shows the picture      │
- │  • captures screen/window   │                  │  • plays the audio        │
- │  • virtual gamepad          │ ◀─────────────── │  • buttons, sticks,       │
- │  • game library             │      input       │    touch, gyro            │
- └─────────────────────────────┘                  └───────────────────────────┘
+```mermaid
+flowchart LR
+    PC["<b>PC (Windows)</b><br/>OrbitNX<br/>• launches the game<br/>• captures the screen or a window<br/>• virtual gamepad<br/>• game library"]
+    NX["<b>Nintendo Switch</b><br/>OrbitNX for Switch<br/>• shows the picture<br/>• plays the audio<br/>• buttons, sticks, touch, gyro"]
+    PC -- "video + audio" --> NX
+    NX -- "input" --> PC
 ```
 
 ### Example: launching a game from your library

@@ -4,17 +4,24 @@
 
 ## Компоненты
 
-```
- ПК (Windows, OrbitNX/)                                 Nintendo Switch (Client/)
-┌──────────────────────────────────┐                  ┌──────────────────────────────┐
-│ ffmpeg.exe: захват экрана/окна    │── UDP 2222 ───▶ │ декодирование (NVTEGRA) →     │
-│   (Windows.Graphics.Capture)      │   MPEG-TS/H.264 │   вывод через SDL2            │
-│   → H.264 (NVENC или libx264)     │                 │                              │
-│ WASAPI loopback → Opus            │── UDP 2224 ───▶ │ Opus → audout                │
-│ виртуальные геймпады (ViGEmBus),  │◀── TCP 2223 ─── │ кнопки, стики, касания,      │
-│   касания, запуск игр             │                 │   гироскоп                   │
-│ библиотека игр                    │── TCP 2225 ───▶ │ меню «My games» с обложками  │
-└──────────────────────────────────┘                  └──────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph PC["ПК (Windows, OrbitNX/)"]
+        cap["ffmpeg.exe: захват экрана или окна<br/>(Windows.Graphics.Capture)<br/>→ H.264 (NVENC или libx264)"]
+        aud["WASAPI loopback → Opus"]
+        inp["виртуальные геймпады (ViGEmBus),<br/>касания, запуск игр"]
+        lib["библиотека игр"]
+    end
+    subgraph NX["Nintendo Switch (Client/)"]
+        dec["декодирование (NVTEGRA)<br/>→ вывод через SDL2"]
+        play["Opus → audout"]
+        ctl["кнопки, стики, касания, гироскоп"]
+        menu["меню «My games» с обложками"]
+    end
+    cap -- "UDP 2222 · MPEG-TS/H.264" --> dec
+    aud -- "UDP 2224" --> play
+    ctl -- "TCP 2223" --> inp
+    lib -- "TCP 2225" --> menu
 ```
 
 Все TCP-соединения устанавливает ПК: Switch только слушает порты, поэтому на ПК не нужно открывать
