@@ -142,7 +142,7 @@ ifneq ($(ROMFS),)
 	export NROFLAGS += --romfsdir=$(CURDIR)/$(ROMFS)
 endif
 
-# Builds a matching .nsp alongside the .nro - a raw exefs PFS0 (elf2nso + npdmtool + build_pfs0,
+# On demand only (not part of `all`): a raw exefs PFS0 .nsp (elf2nso + npdmtool + build_pfs0,
 # all three from switch_rules' own built-in %.nso/%.npdm/%.nsp pattern rules below) for
 # Atmosphere's atmosphere/contents/<TitleID>/ content-override mechanism. Not a retail-style,
 # Tinfoil-installable NSP with its own Album icon (that needs NCA packing via hacBrewPack, not set
@@ -177,7 +177,11 @@ DEPENDS	:=	$(OFILES:.o=.d)
 #---------------------------------------------------------------------------------
 # main targets
 #---------------------------------------------------------------------------------
-all	:	$(OUTPUT).nro $(OUTPUT).nsp
+# .nro only. The raw exefs .nsp that switch_rules can also build (APP_JSON/exheader.json below) is
+# NOT an installable package - no content meta - so DBI rejects it with "Content meta not found";
+# confirmed live, it got mistaken for the HOME-menu tile. The tile is OrbitNX-Forwarder.nsp from
+# tools/build-forwarder.ps1. `make OrbitNX-Switch.nsp` still builds the exefs image on demand.
+all	:	$(OUTPUT).nro
 
 ifeq ($(strip $(NO_NACP)),)
 $(OUTPUT).nro	:	$(OUTPUT).elf $(OUTPUT).nacp

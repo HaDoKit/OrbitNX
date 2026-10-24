@@ -51,4 +51,3 @@ jobs:
           files: |
             OrbitNX/Setup/OrbitNX-Setup.exe
             Client/OrbitNX-Switch.nro
-            Client/OrbitNX-Switch.nsp

@@ -42,11 +42,10 @@ jobs:
           & 'C:\devkitPro\msys2\usr\bin\bash.exe' -lc "make -C '$clientPathUnix'"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Upload .nro / .nsp
+      - name: Upload .nro
         uses: actions/upload-artifact@v4
         with:
           name: OrbitNX-switch-${{ github.sha }}
           path: |
             Client/OrbitNX-Switch.nro
-            Client/OrbitNX-Switch.nsp
           if-no-files-found: error

@@ -17,6 +17,7 @@ DisableProgramGroupPage=yes
 OutputDir=Setup
 OutputBaseFilename=OrbitNX-Setup
 SetupIconFile=Assets\icon.ico
+LicenseFile=..\LICENSE
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2
 SolidCompression=yes
@@ -42,6 +43,7 @@ Type: files; Name: "{app}ocushook.dll"
 
 [Files]
 Source: "{#MyPublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
