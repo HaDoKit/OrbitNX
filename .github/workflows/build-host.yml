@@ -1,14 +1,12 @@
 name: Build Host
 
-# Runs on a self-hosted runner (the owner's PC), so only code that is already in this repository
-# may trigger it: no pull_request trigger - a fork's PR would otherwise run its own code on that
-# machine. Only master, so release tags don't start a duplicate build next to release.yml.
 on:
   push:
     branches:
       - master
     paths:
       - "OrbitNX/**"
+      - "VERSION"
       - ".github/workflows/build-host.yml"
   workflow_dispatch:
 
@@ -21,22 +19,21 @@ concurrency:
 
 jobs:
   build:
-    runs-on: [self-hosted, Windows, X64]
+    runs-on: windows-latest
     timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
       - name: dotnet build (Release)
-        shell: powershell
+        shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          Write-Host "PATH: $env:PATH"
-          Write-Host "dotnet: $((Get-Command dotnet -ErrorAction Stop).Source)"
-          dotnet build OrbitNX/OrbitNX.csproj `
-            /property:GenerateFullPaths=true `
-            /property:Configuration=Release `
-            /consoleloggerparameters:NoSummary
+          dotnet build OrbitNX/OrbitNX.csproj -c Release /property:GenerateFullPaths=true /consoleloggerparameters:NoSummary
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload build output
@@ -46,10 +43,17 @@ jobs:
           path: OrbitNX/bin/Release/net10.0-windows10.0.18362.0/
           if-no-files-found: error
 
-      - name: Build installer (exe)
-        shell: powershell
+      - name: Install Inno Setup
+        shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Build installer (exe)
+        shell: pwsh
+        run: |
           & "${{ github.workspace }}\OrbitNX\scripts\build-installer.ps1"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

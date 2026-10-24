@@ -1,14 +1,12 @@
 name: Build Switch Client
 
-# Runs on a self-hosted runner (the owner's PC), so only code that is already in this repository
-# may trigger it: no pull_request trigger - a fork's PR would otherwise run its own code on that
-# machine. Only master, so release tags don't start a duplicate build next to release.yml.
 on:
   push:
     branches:
       - master
     paths:
       - "Client/**"
+      - "VERSION"
       - ".github/workflows/build-client.yml"
   workflow_dispatch:
 
@@ -21,32 +19,20 @@ concurrency:
 
 jobs:
   build:
-    runs-on: [self-hosted, Windows, X64]
+    runs-on: ubuntu-latest
+    # devkitPro's own image: devkitA64 + libnx + the switch portlibs the Makefile links.
+    container: devkitpro/devkita64:20260219
     timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: devkitPro build (make)
-        shell: powershell
-        run: |
-          $ErrorActionPreference = "Stop"
-          # cygpath -u translated this into an MSYS2 "/home/mihail/..." named-mount path, and GNU
-          # Make's recursive sub-make (Client/Makefile's own -C $(BUILD) step) resolved $(CURDIR)
-          # from that into something totally unrelated (an unrelated drive-letter subst mapping
-          # that happens to exist on this machine from local dev) - confirmed live on this runner.
-          # A plain drive-letter MSYS2 path (/c/...) sidesteps it entirely - confirmed live too,
-          # same style of path this repo's own local dev build already relies on (MSYS2 mounts
-          # every drive letter as /<letter> unconditionally, no translation or subst needed).
-          $clientPath = (Resolve-Path "${{ github.workspace }}\Client").Path
-          $clientPathUnix = "/" + $clientPath.Substring(0,1).ToLower() + $clientPath.Substring(2).Replace('\', '/')
-          & 'C:\devkitPro\msys2\usr\bin\bash.exe' -lc "make -C '$clientPathUnix'"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: make
+        run: make -C Client
 
       - name: Upload .nro
         uses: actions/upload-artifact@v4
         with:
           name: OrbitNX-switch-${{ github.sha }}
-          path: |
-            Client/OrbitNX-Switch.nro
+          path: Client/OrbitNX-Switch.nro
           if-no-files-found: error

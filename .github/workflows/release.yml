@@ -11,49 +11,72 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  release:
-    runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 30
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Resolve version
         id: version
-        shell: powershell
         run: |
-          $ErrorActionPreference = "Stop"
           # VERSION is read by the app, the Switch client and the installer - the release tag must
           # match it, otherwise the release would ship binaries reporting another version.
-          $version = (Get-Content "${{ github.workspace }}\VERSION" -Raw).Trim()
-          if ("${{ github.event_name }}" -eq "push") {
-            $tagVersion = "${{ github.ref_name }}" -replace '^v', ''
-            if ($tagVersion -ne $version) {
-              Write-Error "Tag v$tagVersion does not match VERSION ($version)"
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag_version="${GITHUB_REF_NAME#v}"
+            if [ "$tag_version" != "$version" ]; then
+              echo "::error::Tag v$tag_version does not match VERSION ($version)"
               exit 1
-            }
-          }
-          else {
-            $existing = git ls-remote --tags origin "refs/tags/v$version"
-            if ($existing) {
-              Write-Error "Tag v$version already exists - bump VERSION before releasing again"
-              exit 1
-            }
-          }
-          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            fi
+          elif [ -n "$(git ls-remote --tags origin "refs/tags/v$version")" ]; then
+            echo "::error::Tag v$version already exists - bump VERSION before releasing again"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  client:
+    needs: version
+    runs-on: ubuntu-latest
+    container: devkitpro/devkita64:20260219
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: make
+        run: make -C Client
+
+      - name: Upload .nro
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-nro
+          path: Client/OrbitNX-Switch.nro
+          if-no-files-found: error
+
+  release:
+    needs: [version, client]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Release notes from CHANGELOG
-        shell: powershell
+        shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          $version = "${{ steps.version.outputs.version }}"
+          $version = "${{ needs.version.outputs.version }}"
           # The "## [<version>]" section of a changelog, up to the next heading or link reference.
           function Get-Section([string]$path) {
             $lines = Get-Content $path -Encoding UTF8
@@ -66,41 +89,45 @@ jobs:
             }
             ($section -join "`n").Trim()
           }
-          $ru = Get-Section "${{ github.workspace }}\CHANGELOG.md"
-          $en = Get-Section "${{ github.workspace }}\CHANGELOG.en.md"
-          $notes = "$en`n`n---`n`n$ru`n"
-          [System.IO.File]::WriteAllText("${{ runner.temp }}\release-notes.md", $notes, (New-Object System.Text.UTF8Encoding($false)))
+          $ru = Get-Section "CHANGELOG.md"
+          $en = Get-Section "CHANGELOG.en.md"
+          Set-Content -Path "${{ runner.temp }}\release-notes.md" -Value "$en`n`n---`n`n$ru" -Encoding utf8NoBOM
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
       - name: Build host installer
-        shell: powershell
+        shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          & "${{ github.workspace }}\OrbitNX\scripts\build-installer.ps1" -Version "${{ steps.version.outputs.version }}"
+          & "${{ github.workspace }}\OrbitNX\scripts\build-installer.ps1" -Version "${{ needs.version.outputs.version }}"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Build Switch client
-        shell: powershell
-        run: |
-          $ErrorActionPreference = "Stop"
-          # See build-client.yml's own comment on this step - cygpath -u produced an MSYS2
-          # "/home/..." path that made Client/Makefile's recursive sub-make resolve $(CURDIR)
-          # wrong on this runner (confirmed live). A plain drive-letter MSYS2 path (/c/...)
-          # sidesteps it - also confirmed live, no subst needed.
-          $clientPath = (Resolve-Path "${{ github.workspace }}\Client").Path
-          $clientPathUnix = "/" + $clientPath.Substring(0,1).ToLower() + $clientPath.Substring(2).Replace('\', '/')
-          & 'C:\devkitPro\msys2\usr\bin\bash.exe' -lc "make -C '$clientPathUnix'"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Download Switch client
+        uses: actions/download-artifact@v4
+        with:
+          name: release-nro
+          path: Client
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
+          tag_name: v${{ needs.version.outputs.version }}
           # Only used when the tag doesn't exist yet (manual run): tag the commit this run built.
           target_commitish: ${{ github.sha }}
-          name: OrbitNX ${{ steps.version.outputs.version }}
+          name: OrbitNX ${{ needs.version.outputs.version }}
           body_path: ${{ runner.temp }}/release-notes.md
           # 0.1.0-alpha, 1.0.0-beta.2 ... are marked as pre-releases on GitHub.
-          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          prerelease: ${{ contains(needs.version.outputs.version, '-') }}
           files: |
             OrbitNX/Setup/OrbitNX-Setup.exe
             Client/OrbitNX-Switch.nro
