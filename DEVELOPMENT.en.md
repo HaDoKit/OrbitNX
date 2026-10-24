@@ -2,7 +2,7 @@
 
 # Developing OrbitNX
 
-How to build OrbitNX from source, test changes on the console and cut a release. For how the system
+How to build OrbitNX from source and test changes on the console. For how the system
 works internally, see [docs/architecture.en.md](docs/architecture.en.md).
 
 ## Repository layout
@@ -16,7 +16,6 @@ works internally, see [docs/architecture.en.md](docs/architecture.en.md).
 | `Client/` | Switch app: C, devkitPro / libnx |
 | `Client/tools/` | forwarder build and Switch log viewer over nxlink |
 | `docs/` | user documentation |
-| `.github/workflows/` | CI: PC app, client and release builds |
 | `.claude/skills/` | detailed architecture notes for both parts (see [below](#before-changing-code)) |
 
 ## Prerequisites
@@ -96,7 +95,7 @@ don't interfere with each other.
 
 > **Paths with spaces.** devkitPro's make fails when the path to `Client/` contains spaces. There are
 > three workarounds: build from a copy whose path has no spaces, map the folder to a drive
-> (`subst Y: <path>\Client`, then `make -C /y`), or pass the path in `/c/...` form, as CI does.
+> (`subst Y: <path>\Client`, then `make -C /y`), or pass the path in `/c/...` form.
 
 On Windows, run make from devkitPro's shell, for example
 `C:\devkitPro\msys2\usr\bin\bash.exe -lc "make -C /c/path/to/Client"`. That way `DEVKITPRO` is
@@ -135,9 +134,6 @@ installed. The forwarder only launches the `.nro`: to update the app, just copy 
 no need to reinstall the tile. Launched from the tile, the app runs as a full application rather than
 the album applet, so it gets all the available memory.
 
-The forwarder is not built in CI and is not published in releases, because building it requires
-console keys.
-
 ## Versions
 
 The version number lives in one place: the [`VERSION`](VERSION) file at the repository root. Every
@@ -153,50 +149,8 @@ Numbering follows [SemVer](https://semver.org/): `MAJOR.MINOR.PATCH`, with an `-
 in alpha (`0.1.0-alpha`, `0.1.1-alpha`, …). `MINOR` goes up for new features or a change to the
 PC↔Switch protocol, `PATCH` for fixes.
 
-Release steps:
-
-1. Update `VERSION` and add a section to [CHANGELOG.md](CHANGELOG.md) and
-   [CHANGELOG.en.md](CHANGELOG.en.md).
-2. If the tested configuration changed, update it in the README.
-3. Commit, push to `master` and start the release (see below).
-
-## CI and releases
-
-All workflows run on a self-hosted Windows runner. The runner needs the .NET 10 SDK, Inno Setup 6
-and devkitPro in `C:\devkitPro`.
-
-| Workflow | Runs on | What it does |
-|---|---|---|
-| `build-host.yml` | changes in `OrbitNX/` | Release build and installer, uploaded as artifacts |
-| `build-client.yml` | changes in `Client/` | `make`, `.nro` uploaded as an artifact |
-| `release.yml` | manually or a `v*` tag | installer and `.nro`, published as a GitHub Release |
-
-### Publishing a release
-
-A release is only published when you ask for one; regular commits and pushes don't trigger it.
-
-**Manually on GitHub (the main way):** the **Actions** tab → **Release** → **Run workflow** →
-branch `master` → **Run workflow**. The workflow:
-
-1. takes the version number from `VERSION` and checks that the tag `v<version>` doesn't exist yet;
-   if it does, it stops (bump the version first);
-2. builds the installer and the Switch client;
-3. creates the tag `v<version>` on that commit and publishes a GitHub Release with
-   `OrbitNX-Setup.exe` and `OrbitNX-Switch.nro`.
-
-The release description comes from the `## [<version>]` sections of CHANGELOG.en.md and
-CHANGELOG.md. If a section is missing, no release is published. Versions with a suffix (`-alpha`,
-`-beta`) are marked as pre-releases on GitHub.
-
-**With a git tag**: the same, but you create the tag yourself; it must match `VERSION`:
-
-```
-git tag v0.1.0-alpha
-git push origin v0.1.0-alpha
-```
-
-The runner is a self-hosted machine: while it is off or its `actions.runner.*` service is stopped,
-jobs wait in the queue.
+When the version changes, update `VERSION`, add a section to [CHANGELOG.md](CHANGELOG.md) and
+[CHANGELOG.en.md](CHANGELOG.en.md), and if the tested configuration changed, update it in the README.
 
 ## Before changing code
 
