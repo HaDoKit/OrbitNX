@@ -38,6 +38,11 @@ The project has two parts:
 
 For developers, building from source: [DEVELOPMENT.en.md](DEVELOPMENT.en.md).
 
+## Development
+
+This project was developed together with [Claude Code](https://claude.com/claude-code), Anthropic's
+AI coding assistant.
+
 ## License
 
 [GPL-3.0](LICENSE). Third-party components and their licenses are listed in
