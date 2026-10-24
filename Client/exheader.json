@@ -1,0 +1,22 @@
+{
+	"name":	"OrbitNX",
+	"program_id":	"0x0000000042000001",
+	"program_id_range_min":	"0x0000000042000001",
+	"program_id_range_max":	"0x0000000042000001",
+	"main_thread_stack_size":	"0x00100000",
+	"main_thread_priority":	44,
+	"default_cpu_id":	3,
+	"version":	"0x0",
+	"is_retail":	true,
+	"pool_partition":	0,
+	"is_64_bit":	true,
+	"address_space_type":	1,
+	"system_resource_size":	"0x0",
+	"signature_key_generation":	0,
+	"filesystem_access":	{
+		"permissions":	"0xffffffffffffffff"
+	},
+	"service_access":	[],
+	"service_host":	[],
+	"kernel_capabilities":	[]
+}

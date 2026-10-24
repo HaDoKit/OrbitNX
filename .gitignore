@@ -1,0 +1,43 @@
+# --- PC host (OrbitNX/, C#) ---
+OrbitNX/bin/
+OrbitNX/obj/
+OrbitNX/publish/
+OrbitNX/Setup/*.exe
+*.user
+
+# --- Switch client (OrbitNX Client/OrbitNX/, C) ---
+*.elf
+*.nro
+*.pfs0
+*.nacp
+*.nso
+*.nsp
+OrbitNX Client/OrbitNX/build/
+OrbitNX Client/OrbitNX/OrbitNX.zip
+OrbitNX Client/OrbitNX/switch-ip.txt
+Client/build/
+Client/build_debug/
+Client/logs/
+
+# Legacy Electron host, superseded - not carried into this repo's history
+OrbitNX Client/SkyNX-Streamer/
+
+# Console-unique cryptographic keys - never commit, never share
+prod.keys
+title.keys
+**/prod.keys
+**/title.keys
+
+.DS_Store
+*node_modules
+
+# Editor config - local machine paths (devkitPro install location, etc.), not shared setup
+.vscode/
+
+.lh/
+
+# Local tooling / scratch - never part of the project
+.claude/worktrees/
+.claude/settings.local.json
+imgui.ini
+*.log

@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version from tag
+        id: version
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Build host installer
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          & "${{ github.workspace }}\OrbitNX\scripts\build-installer.ps1" -Version "${{ steps.version.outputs.version }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build Switch client
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          # See build-client.yml's own comment on this step - cygpath -u produced an MSYS2
+          # "/home/..." path that made Client/Makefile's recursive sub-make resolve $(CURDIR)
+          # wrong on this runner (confirmed live). A plain drive-letter MSYS2 path (/c/...)
+          # sidesteps it - also confirmed live, no subst needed.
+          $clientPath = (Resolve-Path "${{ github.workspace }}\Client").Path
+          $clientPathUnix = "/" + $clientPath.Substring(0,1).ToLower() + $clientPath.Substring(2).Replace('\', '/')
+          & 'C:\devkitPro\msys2\usr\bin\bash.exe' -lc "make -C '$clientPathUnix'"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            OrbitNX/Setup/OrbitNX-Setup.exe
+            Client/OrbitNX-Switch.nro
+            Client/OrbitNX-Switch.nsp

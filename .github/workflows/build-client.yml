@@ -1,0 +1,52 @@
+name: Build Switch Client
+
+on:
+  push:
+    paths:
+      - "Client/**"
+      - ".github/workflows/build-client.yml"
+  pull_request:
+    paths:
+      - "Client/**"
+      - ".github/workflows/build-client.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: devkitPro build (make)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          # cygpath -u translated this into an MSYS2 "/home/mihail/..." named-mount path, and GNU
+          # Make's recursive sub-make (Client/Makefile's own -C $(BUILD) step) resolved $(CURDIR)
+          # from that into something totally unrelated (an unrelated drive-letter subst mapping
+          # that happens to exist on this machine from local dev) - confirmed live on this runner.
+          # A plain drive-letter MSYS2 path (/c/...) sidesteps it entirely - confirmed live too,
+          # same style of path this repo's own local dev build already relies on (MSYS2 mounts
+          # every drive letter as /<letter> unconditionally, no translation or subst needed).
+          $clientPath = (Resolve-Path "${{ github.workspace }}\Client").Path
+          $clientPathUnix = "/" + $clientPath.Substring(0,1).ToLower() + $clientPath.Substring(2).Replace('\', '/')
+          & 'C:\devkitPro\msys2\usr\bin\bash.exe' -lc "make -C '$clientPathUnix'"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload .nro / .nsp
+        uses: actions/upload-artifact@v4
+        with:
+          name: OrbitNX-switch-${{ github.sha }}
+          path: |
+            Client/OrbitNX-Switch.nro
+            Client/OrbitNX-Switch.nsp
+          if-no-files-found: error

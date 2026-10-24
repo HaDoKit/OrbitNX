@@ -1,0 +1,60 @@
+name: Build Host
+
+on:
+  push:
+    paths:
+      - "OrbitNX/**"
+      - ".github/workflows/build-host.yml"
+  pull_request:
+    paths:
+      - "OrbitNX/**"
+      - ".github/workflows/build-host.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-host-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: dotnet build (Release)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          Write-Host "PATH: $env:PATH"
+          Write-Host "dotnet: $((Get-Command dotnet -ErrorAction Stop).Source)"
+          dotnet build OrbitNX/OrbitNX.csproj `
+            /property:GenerateFullPaths=true `
+            /property:Configuration=Release `
+            /consoleloggerparameters:NoSummary
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: OrbitNX-host-${{ github.sha }}
+          path: OrbitNX/bin/Release/net10.0-windows10.0.18362.0/
+          if-no-files-found: error
+
+      - name: Build installer (exe)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          & "${{ github.workspace }}\OrbitNX\scripts\build-installer.ps1"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: OrbitNX-installer-${{ github.sha }}
+          path: OrbitNX/Setup/OrbitNX-Setup.exe
+          if-no-files-found: error
