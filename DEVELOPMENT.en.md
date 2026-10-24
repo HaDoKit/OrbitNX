@@ -158,8 +158,7 @@ Release steps:
 1. Update `VERSION` and add a section to [CHANGELOG.md](CHANGELOG.md) and
    [CHANGELOG.en.md](CHANGELOG.en.md).
 2. If the tested configuration changed, update it in the README.
-3. Commit and create a tag with the same number (see below). If the tag doesn't match `VERSION`,
-   `release.yml` fails.
+3. Commit, push to `master` and start the release (see below).
 
 ## CI and releases
 
@@ -170,14 +169,34 @@ and devkitPro in `C:\devkitPro`.
 |---|---|---|
 | `build-host.yml` | changes in `OrbitNX/` | Release build and installer, uploaded as artifacts |
 | `build-client.yml` | changes in `Client/` | `make`, `.nro` uploaded as an artifact |
-| `release.yml` | a `v*` tag | installer and `.nro`, published as a GitHub Release; versions with a suffix (`-alpha`, `-beta`) are marked as pre-releases |
+| `release.yml` | manually or a `v*` tag | installer and `.nro`, published as a GitHub Release |
 
-To cut a release, create and push a tag:
+### Publishing a release
+
+A release is only published when you ask for one; regular commits and pushes don't trigger it.
+
+**Manually on GitHub (the main way):** the **Actions** tab → **Release** → **Run workflow** →
+branch `master` → **Run workflow**. The workflow:
+
+1. takes the version number from `VERSION` and checks that the tag `v<version>` doesn't exist yet;
+   if it does, it stops (bump the version first);
+2. builds the installer and the Switch client;
+3. creates the tag `v<version>` on that commit and publishes a GitHub Release with
+   `OrbitNX-Setup.exe` and `OrbitNX-Switch.nro`.
+
+The release description comes from the `## [<version>]` sections of CHANGELOG.en.md and
+CHANGELOG.md. If a section is missing, no release is published. Versions with a suffix (`-alpha`,
+`-beta`) are marked as pre-releases on GitHub.
+
+**With a git tag**: the same, but you create the tag yourself; it must match `VERSION`:
 
 ```
 git tag v0.1.0-alpha
 git push origin v0.1.0-alpha
 ```
+
+The runner is a self-hosted machine: while it is off or its `actions.runner.*` service is stopped,
+jobs wait in the queue.
 
 ## Before changing code
 

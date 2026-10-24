@@ -1,12 +1,21 @@
 name: Release
 
+# Two ways to publish a release, both end in the same GitHub Release:
+#   - Actions -> Release -> "Run workflow" (on master): the version comes from VERSION and the
+#     tag v<VERSION> is created by this workflow on the commit it ran on.
+#   - pushing a v* tag by hand: the tag must match VERSION.
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*"
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -16,20 +25,51 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Resolve version from tag
+      - name: Resolve version
         id: version
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-          $version = "${{ github.ref_name }}" -replace '^v', ''
-          # The tag must match the checked-in VERSION file, which the app, the Switch client and
-          # the installer all read - otherwise the release would ship binaries reporting another version.
-          $fileVersion = (Get-Content "${{ github.workspace }}\VERSION" -Raw).Trim()
-          if ($version -ne $fileVersion) {
-            Write-Error "Tag v$version does not match VERSION ($fileVersion)"
-            exit 1
+          # VERSION is read by the app, the Switch client and the installer - the release tag must
+          # match it, otherwise the release would ship binaries reporting another version.
+          $version = (Get-Content "${{ github.workspace }}\VERSION" -Raw).Trim()
+          if ("${{ github.event_name }}" -eq "push") {
+            $tagVersion = "${{ github.ref_name }}" -replace '^v', ''
+            if ($tagVersion -ne $version) {
+              Write-Error "Tag v$tagVersion does not match VERSION ($version)"
+              exit 1
+            }
+          }
+          else {
+            $existing = git ls-remote --tags origin "refs/tags/v$version"
+            if ($existing) {
+              Write-Error "Tag v$version already exists - bump VERSION before releasing again"
+              exit 1
+            }
           }
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Release notes from CHANGELOG
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = "${{ steps.version.outputs.version }}"
+          # The "## [<version>]" section of a changelog, up to the next heading or link reference.
+          function Get-Section([string]$path) {
+            $lines = Get-Content $path -Encoding UTF8
+            $start = [Array]::FindIndex($lines, [Predicate[string]]{ param($l) $l.StartsWith("## [$version]") })
+            if ($start -lt 0) { Write-Error "No '## [$version]' section in $path"; exit 1 }
+            $section = @()
+            for ($i = $start + 1; $i -lt $lines.Length; $i++) {
+              if ($lines[$i].StartsWith("## ") -or $lines[$i] -match '^\[[^\]]+\]:') { break }
+              $section += $lines[$i]
+            }
+            ($section -join "`n").Trim()
+          }
+          $ru = Get-Section "${{ github.workspace }}\CHANGELOG.md"
+          $en = Get-Section "${{ github.workspace }}\CHANGELOG.en.md"
+          $notes = "$en`n`n---`n`n$ru`n"
+          [System.IO.File]::WriteAllText("${{ runner.temp }}\release-notes.md", $notes, (New-Object System.Text.UTF8Encoding($false)))
 
       - name: Build host installer
         shell: powershell
@@ -54,9 +94,13 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          tag_name: v${{ steps.version.outputs.version }}
+          # Only used when the tag doesn't exist yet (manual run): tag the commit this run built.
+          target_commitish: ${{ github.sha }}
+          name: OrbitNX ${{ steps.version.outputs.version }}
+          body_path: ${{ runner.temp }}/release-notes.md
           # 0.1.0-alpha, 1.0.0-beta.2 ... are marked as pre-releases on GitHub.
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
           files: |
             OrbitNX/Setup/OrbitNX-Setup.exe
             Client/OrbitNX-Switch.nro
