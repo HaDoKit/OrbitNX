@@ -22,6 +22,13 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $version = "${{ github.ref_name }}" -replace '^v', ''
+          # The tag must match the checked-in VERSION file, which the app, the Switch client and
+          # the installer all read - otherwise the release would ship binaries reporting another version.
+          $fileVersion = (Get-Content "${{ github.workspace }}\VERSION" -Raw).Trim()
+          if ($version -ne $fileVersion) {
+            Write-Error "Tag v$version does not match VERSION ($fileVersion)"
+            exit 1
+          }
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Build host installer
@@ -48,6 +55,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          # 0.1.0-alpha, 1.0.0-beta.2 ... are marked as pre-releases on GitHub.
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             OrbitNX/Setup/OrbitNX-Setup.exe
             Client/OrbitNX-Switch.nro

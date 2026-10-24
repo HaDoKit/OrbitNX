@@ -73,7 +73,7 @@ gcc -O2 OrbitNX/Native/TouchHelper/touchhelper.c -o OrbitNX/Native/TouchHelper/t
 ### Установщик
 
 ```
-powershell -ExecutionPolicy Bypass -File OrbitNX/scripts/build-installer.ps1 [-Version 1.2.3]
+powershell -ExecutionPolicy Bypass -File OrbitNX/scripts/build-installer.ps1 [-Version 0.1.0-alpha]
 ```
 
 Скрипт выполняет `dotnet publish` (win-x64, self-contained), затем собирает `installer.iss` через
@@ -137,6 +137,28 @@ Title ID закреплён (`01E7E36C3EA40000`), поэтому новая сб
 
 Форвардер не собирается в CI и не публикуется в релизах: для его сборки нужны ключи консоли.
 
+## Версии
+
+Номер версии хранится в одном месте — в файле [`VERSION`](VERSION) в корне репозитория. Оттуда его
+берут все части:
+
+- `OrbitNX.csproj` — версия сборки; приложение показывает её в заголовке окна и пишет первой строкой
+  в `OrbitNX.log`;
+- `Client/Makefile` — версия в метаданных `.nro` (`.nacp`) и в правом верхнем углу меню Switch;
+- `installer.iss` — версия установщика.
+
+Нумерация — [SemVer](https://semver.org/lang/ru/): `MAJOR.MINOR.PATCH`, пока идёт альфа — с
+суффиксом `-alpha` (`0.1.0-alpha`, `0.1.1-alpha`, …). `MINOR` растёт при новых возможностях или
+изменении протокола между ПК и Switch, `PATCH` — при исправлениях.
+
+Порядок выпуска:
+
+1. Обновите `VERSION` и добавьте раздел в [CHANGELOG.md](CHANGELOG.md) и
+   [CHANGELOG.en.md](CHANGELOG.en.md).
+2. Если изменилась проверенная конфигурация, обновите её в README.
+3. Закоммитьте и создайте тег с тем же номером (см. ниже). Если тег не совпадает с `VERSION`,
+   `release.yml` остановится с ошибкой.
+
 ## CI и релизы
 
 Все workflow работают на self-hosted раннере Windows. На раннере должны быть .NET 10 SDK,
@@ -146,13 +168,13 @@ Inno Setup 6 и devkitPro в `C:\devkitPro`.
 |---|---|---|
 | `build-host.yml` | изменения в `OrbitNX/` | сборка Release и установщика, результаты — в artifacts |
 | `build-client.yml` | изменения в `Client/` | `make`, `.nro` — в artifacts |
-| `release.yml` | тег `v*` | установщик с версией из тега + `.nro`, публикация GitHub Release |
+| `release.yml` | тег `v*` | установщик и `.nro`, публикация GitHub Release; версии с суффиксом (`-alpha`, `-beta`) помечаются как pre-release |
 
 Чтобы выпустить релиз, создайте и отправьте тег:
 
 ```
-git tag v1.2.3
-git push origin v1.2.3
+git tag v0.1.0-alpha
+git push origin v0.1.0-alpha
 ```
 
 ## Прежде чем менять код

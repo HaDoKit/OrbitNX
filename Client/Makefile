@@ -7,6 +7,9 @@ $(error "Please set DEVKITPRO in your environment. export DEVKITPRO=<path to>/de
 endif
 
 TOPDIR ?= $(CURDIR)
+# Single source of truth for the version: ../VERSION (also read by OrbitNX.csproj and installer.iss).
+# Set before switch_rules, which falls back to 1.0.0 when APP_VERSION is empty.
+APP_VERSION	:=	$(strip $(shell cat "$(TOPDIR)/../VERSION"))
 include $(DEVKITPRO)/libnx/switch_rules
 
 #---------------------------------------------------------------------------------
@@ -47,7 +50,7 @@ APP_AUTHOR	:=	OrbitNX
 ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
 CFLAGS	:=	-g -Wall -ffunction-sections \
-			$(ARCH) $(DEFINES) \
+			$(ARCH) $(DEFINES) -DORBITNX_VERSION=\"$(APP_VERSION)\" \
 			`$(PREFIX)pkg-config --cflags sdl2 SDL2_ttf SDL2_image SDL2_gfx libavformat libavcodec libavutil libswresample libswscale opusfile`
 
 ifeq ($(DEBUG),1)

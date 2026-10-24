@@ -74,7 +74,7 @@ gcc -O2 OrbitNX/Native/TouchHelper/touchhelper.c -o OrbitNX/Native/TouchHelper/t
 ### Installer
 
 ```
-powershell -ExecutionPolicy Bypass -File OrbitNX/scripts/build-installer.ps1 [-Version 1.2.3]
+powershell -ExecutionPolicy Bypass -File OrbitNX/scripts/build-installer.ps1 [-Version 0.1.0-alpha]
 ```
 
 The script runs `dotnet publish` (win-x64, self-contained), then compiles `installer.iss` with
@@ -138,6 +138,29 @@ the album applet, so it gets all the available memory.
 The forwarder is not built in CI and is not published in releases, because building it requires
 console keys.
 
+## Versions
+
+The version number lives in one place: the [`VERSION`](VERSION) file at the repository root. Every
+part reads it from there:
+
+- `OrbitNX.csproj`: the assembly version; the app shows it in the window title and writes it as the
+  first line of `OrbitNX.log`;
+- `Client/Makefile`: the version in the `.nro` metadata (`.nacp`) and in the top-right corner of the
+  Switch menu;
+- `installer.iss`: the installer version.
+
+Numbering follows [SemVer](https://semver.org/): `MAJOR.MINOR.PATCH`, with an `-alpha` suffix while
+in alpha (`0.1.0-alpha`, `0.1.1-alpha`, …). `MINOR` goes up for new features or a change to the
+PC↔Switch protocol, `PATCH` for fixes.
+
+Release steps:
+
+1. Update `VERSION` and add a section to [CHANGELOG.md](CHANGELOG.md) and
+   [CHANGELOG.en.md](CHANGELOG.en.md).
+2. If the tested configuration changed, update it in the README.
+3. Commit and create a tag with the same number (see below). If the tag doesn't match `VERSION`,
+   `release.yml` fails.
+
 ## CI and releases
 
 All workflows run on a self-hosted Windows runner. The runner needs the .NET 10 SDK, Inno Setup 6
@@ -147,13 +170,13 @@ and devkitPro in `C:\devkitPro`.
 |---|---|---|
 | `build-host.yml` | changes in `OrbitNX/` | Release build and installer, uploaded as artifacts |
 | `build-client.yml` | changes in `Client/` | `make`, `.nro` uploaded as an artifact |
-| `release.yml` | a `v*` tag | installer with the version from the tag + `.nro`, published as a GitHub Release |
+| `release.yml` | a `v*` tag | installer and `.nro`, published as a GitHub Release; versions with a suffix (`-alpha`, `-beta`) are marked as pre-releases |
 
 To cut a release, create and push a tag:
 
 ```
-git tag v1.2.3
-git push origin v1.2.3
+git tag v0.1.0-alpha
+git push origin v0.1.0-alpha
 ```
 
 ## Before changing code

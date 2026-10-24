@@ -1,6 +1,9 @@
 #define MyAppName "OrbitNX"
 #ifndef MyAppVersion
-  #define MyAppVersion "1.15.0"
+  ; Single source of truth for the version: ../VERSION (also read by OrbitNX.csproj and Client/Makefile).
+  #define VersionFile FileOpen(AddBackslash(SourcePath) + "..\VERSION")
+  #define MyAppVersion Trim(FileRead(VersionFile))
+  #expr FileClose(VersionFile)
 #endif
 #define MyAppPublisher "OrbitNX"
 #define MyAppExeName "OrbitNX.exe"

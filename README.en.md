@@ -2,6 +2,11 @@
 
 # OrbitNX
 
+> **Alpha version 0.1.0-alpha.** The project is at an early stage: expect bugs, and settings and the
+> protocol may change between versions. Stable operation has so far been confirmed on a single setup
+> only; see [Tested configuration](#tested-configuration). For what changed, see
+> [CHANGELOG.en.md](CHANGELOG.en.md).
+
 Stream games from a Windows PC to a Nintendo Switch over your local network: video and audio go
 from the PC to the console, and input from the Joy-Con, Pro Controller and touch screen goes back to
 the PC.
@@ -37,6 +42,25 @@ The project has two parts:
 - [How it works](docs/architecture.en.md): components, network ports and protocol
 
 For developers, building from source: [DEVELOPMENT.en.md](DEVELOPMENT.en.md).
+
+## Tested configuration
+
+Stable operation of version 0.1.0-alpha is confirmed on this setup. OrbitNX should work on other
+hardware too, but it hasn't been tested yet.
+
+| | |
+|---|---|
+| **PC** | Windows 11 Pro 24H2 (build 26100) |
+| CPU | AMD Ryzen 7 5800X |
+| GPU | NVIDIA GeForce RTX 3080, driver 610.74 |
+| Memory | 80 GB |
+| PC network | wired (Ethernet) to the router |
+| FFmpeg | 8.1.2 (bundled) |
+| **Switch** | Nintendo Switch OLED |
+| Switch network | 5 GHz Wi-Fi |
+
+If OrbitNX works (or doesn't) for you on other hardware, please report it in
+[Issues](https://github.com/HaDoKit/OrbitNX/issues); it helps grow this list.
 
 ## Development
 

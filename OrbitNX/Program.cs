@@ -35,6 +35,7 @@ internal static class Program
         // Always 48000 - the patched Switch client's audio.c decode/resample path is compiled in
         // around that exact rate (see AudioCaptureSender/SettingsView) - overriding here means a
         // stale non-default value from an old config.json can't silently break audio.
+        Logger.Log("App", $"OrbitNX {AppVersion.Current}");
         var config = Config.Load();
         config.AudioSampleRate = 48000;
         var orchestrator = new AppOrchestrator(config);

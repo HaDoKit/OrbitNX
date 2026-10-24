@@ -168,6 +168,11 @@ void drawOrbitNxTopBar(MenuContext *context)
     SDL_DrawText(context, x, y, red, "N");
     x += FC_GetWidth(context->font, "%s", "N");
     SDL_DrawText(context, x, y, blue, "X");
+
+    SDL_Color grey = {150, 150, 160, 255};
+    const char *version = "v" ORBITNX_VERSION;
+    int versionWidth = FC_GetWidth(context->font, "%s", version);
+    SDL_DrawText(context, MENU_RESX - 24 - versionWidth, y, grey, version);
 }
 
 void drawIpAddressLine(MenuContext *context)

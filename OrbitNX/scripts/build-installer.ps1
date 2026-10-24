@@ -2,10 +2,8 @@
 # Produces Setup\OrbitNX-Setup.exe. Not part of the normal F5 dev loop
 # (see ../DEVELOPMENT.md) - this is release packaging only.
 #
-# -Version overrides installer.iss's #define MyAppVersion (used by the
-# release workflow to stamp the installer with the git tag instead of
-# whatever version happens to be checked in); omit it for a local build
-# and installer.iss's own default is used.
+# -Version overrides the version installer.iss reads from ../VERSION (the
+# release workflow passes the git tag); omit it for a local build.
 param(
     [string]$Version
 )

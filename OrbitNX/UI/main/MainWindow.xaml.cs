@@ -34,6 +34,9 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         Height = SystemParameters.PrimaryScreenHeight * 0.25;
 
         InitializeComponent();
+        // Only the drawn title bar shows the version - Window.Title stays "OrbitNX" because
+        // Program.ActivateExistingInstance finds the running window by that exact title.
+        AppTitleBar.Title = $"OrbitNX {AppVersion.Current}";
         _orchestrator = orchestrator;
         _trayIcon = trayIcon;
 

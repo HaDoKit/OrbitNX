@@ -19,6 +19,9 @@
     <RootNamespace>OrbitNX</RootNamespace>
     <Product>OrbitNX</Product>
     <AssemblyTitle>OrbitNX</AssemblyTitle>
+    <!-- Single source of truth for the version: ../VERSION (also read by Client/Makefile and
+         installer.iss). -->
+    <Version>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)..\VERSION').Trim())</Version>
     <!-- App.xaml's ApplicationDefinition build action auto-generates its own Main() - Program.cs
          owns startup instead (has to build Config/AppOrchestrator/the tray icon before any window
          exists), so this picks that one explicitly rather than leaving two candidate entry points. -->

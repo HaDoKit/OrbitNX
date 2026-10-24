@@ -15,7 +15,7 @@
         <!-- Transparent so the animated background shows through the titlebar strip; TitleBar
              supplies the drag region and app-styled minimize/maximize/close buttons since
              ExtendsContentIntoTitleBar removes the native ones. -->
-        <ui:TitleBar Title="OrbitNX" Height="42" VerticalAlignment="Top"
+        <ui:TitleBar x:Name="AppTitleBar" Title="OrbitNX" Height="42" VerticalAlignment="Top"
                      Background="Transparent" Foreground="White" />
 
         <Grid x:Name="ViewHost" Margin="0,42,0,0" />
