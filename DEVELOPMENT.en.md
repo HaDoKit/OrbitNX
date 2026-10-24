@@ -1,0 +1,177 @@
+[Русский](DEVELOPMENT.md) | **English**
+
+# Developing OrbitNX
+
+How to build OrbitNX from source, test changes on the console and cut a release. For how the system
+works internally, see [docs/architecture.en.md](docs/architecture.en.md).
+
+## Repository layout
+
+| Folder | Contents |
+|---|---|
+| `OrbitNX/` | PC app: C#, .NET 10, WPF |
+| `OrbitNX/lib/` | bundled prebuilt tools: `ffmpeg.exe`, `vigembus-setup.exe` |
+| `OrbitNX/Native/TouchHelper/` | small C helper for touch input (`touchhelper.c` and the built `touchhelper.exe`) |
+| `OrbitNX/scripts/`, `OrbitNX/installer.iss` | installer build |
+| `Client/` | Switch app: C, devkitPro / libnx |
+| `Client/tools/` | forwarder build and Switch log viewer over nxlink |
+| `docs/` | user documentation |
+| `.github/workflows/` | CI: PC app, client and release builds |
+| `.claude/skills/` | detailed architecture notes for both parts (see [below](#before-changing-code)) |
+
+## Prerequisites
+
+**PC app**
+- Windows 10 1903 or later (Windows 11 recommended).
+- [.NET 10 SDK](https://dotnet.microsoft.com/download).
+- For the installer: [Inno Setup 6](https://jrsoftware.org/isdl.php).
+
+**Switch client**
+- [devkitPro](https://devkitpro.org/wiki/Getting_Started) with `switch-dev` and these libraries:
+  ```
+  pacman -S switch-dev switch-sdl2 switch-sdl2_ttf switch-sdl2_image switch-sdl2_gfx switch-ffmpeg switch-libopus switch-opusfile
+  ```
+- A Switch running the Homebrew Menu, for testing on the console.
+
+## PC app
+
+### Build and run
+
+```
+dotnet build OrbitNX/OrbitNX.csproj -c Release
+```
+
+The output is `OrbitNX/bin/Release/net10.0-windows10.0.18362.0/OrbitNX.exe`. The build copies
+`ffmpeg.exe`, `vigembus-setup.exe` and `touchhelper.exe` next to it.
+
+- Settings (`config.json`), the library (`library.json`, `covers/`) and the log (`OrbitNX.log`) are
+  stored next to the exe. Log timestamps use `HH:mm:ss.fff`, the same format as the Switch log.
+- Virtual gamepads need the ViGEmBus driver. If it is missing, you can install it from the app's
+  settings («Драйверы», Drivers).
+- Only one instance of OrbitNX can run at a time.
+
+### Bundled tools in `OrbitNX/lib/`
+
+- **`ffmpeg.exe`**: the "essentials" build from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/),
+  currently 8.1. It must be 8.0 or later, because that release added the `gfxcapture` filter
+  (Windows.Graphics.Capture) that capture relies on. After updating it, check both monitor capture
+  and game-window capture.
+- **`vigembus-setup.exe`**: the [ViGEmBus](https://github.com/nefarius/ViGEmBus) driver installer.
+
+When you replace or add third-party components, update
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+### TouchHelper
+
+Touches from the Switch screen are performed by a separate program, `touchhelper.exe`. Calling
+`InjectTouchInput` directly from .NET does not work; the top of `touchhelper.c` explains why. The
+built exe is checked in. If you change the source, rebuild it with MinGW:
+
+```
+gcc -O2 OrbitNX/Native/TouchHelper/touchhelper.c -o OrbitNX/Native/TouchHelper/touchhelper.exe
+```
+
+### Installer
+
+```
+powershell -ExecutionPolicy Bypass -File OrbitNX/scripts/build-installer.ps1 [-Version 1.2.3]
+```
+
+The script runs `dotnet publish` (win-x64, self-contained), then compiles `installer.iss` with
+`ISCC.exe`, which it looks for on PATH and in Inno Setup's default install folder. The output is
+`OrbitNX/Setup/OrbitNX-Setup.exe`. The installer installs the ViGEmBus driver if it is missing and
+places THIRD-PARTY-NOTICES.md next to the app.
+
+## Switch client
+
+### Build
+
+```
+make -C Client            # OrbitNX-Switch.nro
+make -C Client DEBUG=1    # OrbitNX-Switch-debug.nro: -Og and logging over nxlink
+```
+
+The release and debug builds keep their object files apart (`build/` and `build_debug/`), so they
+don't interfere with each other.
+
+> **Paths with spaces.** devkitPro's make fails when the path to `Client/` contains spaces. There are
+> three workarounds: build from a copy whose path has no spaces, map the folder to a drive
+> (`subst Y: <path>\Client`, then `make -C /y`), or pass the path in `/c/...` form, as CI does.
+
+On Windows, run make from devkitPro's shell, for example
+`C:\devkitPro\msys2\usr\bin\bash.exe -lc "make -C /c/path/to/Client"`. That way `DEVKITPRO` is
+guaranteed to be set.
+
+### Testing on the console
+
+1. Open the Homebrew Menu on the Switch.
+2. Send the app: `nxlink -a <Switch IP> Client/OrbitNX-Switch.nro`.
+
+The release build writes no log at all. To see the log, use the debug build:
+
+```
+powershell -ExecutionPolicy Bypass -File Client/tools/nxlink-log.ps1 -SwitchIp <Switch IP> -Nro Client/OrbitNX-Switch-debug.nro -LogDir Client/logs
+```
+
+The script sends the `.nro`, accepts the app's log connection itself, prints each line and appends it
+to `Client/logs/nxlink-<time>.log`. Don't replace it with `nxlink -s` redirected to a file: the log
+then stops right after startup.
+
+### HOME menu tile (forwarder)
+
+`Client/tools/build-forwarder.ps1` builds `Client/OrbitNX-Forwarder.nsp`. It is an installable
+title: it adds an OrbitNX tile to the Switch HOME menu and launches
+`sdmc:/switch/OrbitNX/OrbitNX-Switch.nro`.
+
+1. Build the client and copy `OrbitNX-Switch.nro` to `/switch/OrbitNX/` on the SD card.
+2. Install [nton](https://pypi.org/project/nton/): `python -m pip install nton`.
+3. Put **your own** console's keys in `%USERPROFILE%\.switch\prod.keys`. Never commit the keys or
+   share them with anyone; `prod.keys` and `title.keys` are already in `.gitignore`.
+4. `powershell -ExecutionPolicy Bypass -File Client/tools/build-forwarder.ps1`
+5. Install the `.nsp` on the console with DBI or a similar tool.
+
+The Title ID is pinned (`01E7E36C3EA40000`), so a rebuilt forwarder updates the tile that is already
+installed. The forwarder only launches the `.nro`: to update the app, just copy a new `.nro`; there's
+no need to reinstall the tile. Launched from the tile, the app runs as a full application rather than
+the album applet, so it gets all the available memory.
+
+The forwarder is not built in CI and is not published in releases, because building it requires
+console keys.
+
+## CI and releases
+
+All workflows run on a self-hosted Windows runner. The runner needs the .NET 10 SDK, Inno Setup 6
+and devkitPro in `C:\devkitPro`.
+
+| Workflow | Runs on | What it does |
+|---|---|---|
+| `build-host.yml` | changes in `OrbitNX/` | Release build and installer, uploaded as artifacts |
+| `build-client.yml` | changes in `Client/` | `make`, `.nro` uploaded as an artifact |
+| `release.yml` | a `v*` tag | installer with the version from the tag + `.nro`, published as a GitHub Release |
+
+To cut a release, create and push a tag:
+
+```
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+## Before changing code
+
+- `.claude/skills/` documents both parts: `orbitnx-pc-architect` (PC) and `orbitnx-switch-client`
+  (Switch). It also lists approaches that were already tried and rejected. Read the section for the
+  part you're changing so you don't repeat a dead end.
+  - `orbitnx-pc-architect/references/`: `switch-protocol.md`, `ffmpeg-pipeline.md`,
+    `steam-bigpicture.md`, `native-interop.md`.
+  - `orbitnx-switch-client/references/`: `network-protocol.md`, `decode-pipeline.md`,
+    `audio-pipeline.md`, `rendering-input.md`, `platform-constraints.md`.
+- **The protocol is defined in code twice**: in C# in `OrbitNX/` and in C in `Client/`. Change both
+  sides in the same commit.
+- OrbitNX must not inject into game processes or read their memory; this matters for games with
+  anti-cheat. Processes are opened with minimal access rights only.
+- **Documentation** is kept in two languages: the Russian version is `X.md` and the English one is
+  `X.en.md` in the same folder. When you change one, update the other too.
+
+## License
+
+[GPL-3.0](LICENSE). Third-party licenses are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

@@ -1,3 +1,5 @@
+**Русский** | [English](README.en.md)
+
 # OrbitNX
 
 Стриминг игр с Windows-ПК на Nintendo Switch по локальной сети: картинка и звук идут с компьютера
